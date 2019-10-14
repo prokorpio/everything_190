@@ -1,0 +1,7 @@
+Possibly Useful Links concerning ImageNet and AMC
+
+//Imagenet Preparation
+https://github.com/pytorch/examples/tree/master/imagenet
+
+//Basic NN Compression
+https://github.com/opencv/openvino_training_extensions/blob/develop/pytorch_toolkit/nncf/examples/classification/README.md
