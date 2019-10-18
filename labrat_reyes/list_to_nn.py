@@ -1,7 +1,7 @@
 slf_list = [20,20,10]
 
 
-def createmodel(slf_list,inputsize):
+def createmodel(slf_list,inputsize,device):
     fclist = [] 
     #idea from amc
     for i, size in enumerate(slf_list):
