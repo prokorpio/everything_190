@@ -11,6 +11,12 @@ import torch.utils.data as data
 
 import models_to_prune 
 
+import torch.nn as nn
+import torch.optim as optim
+import time
+
+import numpy as np
+
 
 class PruningEnv:
     # NOTE: will prune a single layer for now
@@ -24,12 +30,17 @@ class PruningEnv:
         # build chosen model to prune
         self.model_type = model_type
         self.model = self.build_model_to_prune()
+        # may pre-train the model here for N epochs
 
         # state
-        self.layer_to_process = None # Layer to process, name is usr-identified 
-        self.state_size = 64 # TODO: What to use?
+        self.layer_to_process = None # Layer to process, 
+                                     # str name is usr-identified 
+        self.state_size = 64 # TODO: Ask kuya Lejan what to use
 
-    
+        # per episode
+        self.expis = 5    # num of experience before backprop for agent       
+        self.xp_count = 0 # count xp for now, stopping is controlled 
+                          # by the reward value not chaning any more
 
     def get_dataloaders(self):
         ''' imports the chosen dataset '''
@@ -68,7 +79,6 @@ class PruningEnv:
         print('dataset not available') 
         return -1
 
-    
     def build_model_to_prune(self): 
         ''' Builds the model to compress '''
 
@@ -80,12 +90,13 @@ class PruningEnv:
             print('model not available') #TODO: use proper handling
             return -1
 
-
-    def get_state(self): 
+    def _get_state(self): # class private method, 
+                           #access via: _PruningEnv__get_state()
         ''' Helper tool for step(), 
             gets the layer/state'''
         
         # get conv layer 
+        # may keep an external pth file for original model
         for name, module in self.model.named_modules():
             if self.layer_to_process in name:
                 #conv_layer_name = name
@@ -99,16 +110,138 @@ class PruningEnv:
         #TODO: process layer with kuya Lejan's state-rep
 
         # return processed state
+        return conv_layer
 
+    def _train_model(self, num_epochs=10): 
+        """ trains the model being pruned """
+        
+        loss_func = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(self.model.parameters(0.001))
+        
+        self.model.train()
+        print('Training CNN model')
+        for epoch in range(num_epochs):
+            train_acc = []
+            start_time = time.time()
+            for idx, train_data in enumerate(self.train_dl):
+                inputs, labels = train_data
+                # TODO: transfer to device?
+                
+                optimizer.zero_grad()
+                
+                # forward
+                preds = self.model(inputs) # forward pass
+                loss = loss_func(preds,labels) # compute loss
+                
+                # backward
+                loss.backward()  # compute grads
+                optimizer.step() # update params w/ Adam update rule
 
-    def calculate_reward(self, model): 
+                # print accuracy
+                _, prediction = torch.max(preds, dim=1) # idx w/ max val is
+                                                        # most confident class
+                train_acc.append((prediction==labels).type(torch.double).mean())
+
+                #if (idx+1) % 1500 == 0:
+            elapsed_time = time.time() - start_time
+            str_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
+            print('Epoch [{}/{}] Step [{}/{}] | Loss: {:.4f} Acc: {:.4f} Time: {}'
+                    .format(epoch+1, num_epochs, idx+1, len(self.train_dl), 
+                            loss.item(), train_acc[-1], str_time))
+        #print('Training Done')
+
+    def _evaluate_model(self):
+        '''evaluates the model being pruned'''
+
+        self.model.eval()
+        print('Evaluating CNN model''')
+        total = 0 # total number of labels
+        correct = 0 # total correct preds
+                
+        with torch.no_grad():
+            for test_data in self.test_dl:
+                inputs, labels = test_data
+                # TODO: transfer to device?
+
+                preds = self.model(inputs) #forward pass
+                
+                _, prediction = torch.max(preds,dim=1)
+                total += labels.size(0) # number of rows = num of samples
+                correct += (prediction == labels).sum().item() 
+
+        val_acc = correct/total
+        print('Validation Accuracy: {:.2f}%'.format(val_acc*100))
+        
+        return val_acc
+                
+    
+    def _estimate_layer_flops(self):
+        ''' estimate conv layer flops,
+            same as in AMC implementation '''
+
+        for name, module in self.model.named_modules():
+            if self.layer_to_process in name:
+                #conv_layer_name = name
+                conv_layer = module
+                break
+
+        for inputs, _ in self.train_dl:
+            break # just to get input size
+
+        input_h = inputs.size()[2]
+        input_w = inputs.size()[3]
+        kernel_h = conv_layer.kernel_size[0]
+        kernel_w = conv_layer.kernel_size[1]
+        pad_h = conv_layer.padding[0]
+        pad_w = conv_layer.padding[1]
+        stride_h = conv_layer.stride[0]
+        stride_w = conv_layer.stride[1]
+        C_in = conv_layer.in_channels
+        C_out = conv_layer.out_channels
+        groups = conv_layer.groups
+
+        filter_steps_h = (input_h + 2*pad_h - kernel_h)/stride_h + 1  
+        filter_steps_w = (input_w + 2*pad_w - kernel_w)/stride_w + 1  
+
+        layer_flops = C_out * (C_in/groups) * kernel_h*kernel_w \
+                            * filter_steps_h * filter_steps_w
+       
+        return layer_flops
+
+    def _calculate_reward(self): 
         ''' Helper tool for step(), 
             performs the ops to get reward'''
 
+        # train for M epochs
+        self._train_model(num_epochs=2)
+
+        # test
+        acc = self._evaluate_model() # acc is in {0,1}
+
+        # get flops 
+        flops = self._estimate_layer_flops()
+
+        # get reward as func of acc and flops
+        reward = -(1-acc)*np.log(flops)
+
+        return reward
 
     def step(self, action):
-        ''' Perform one timestep '''
+        ''' Run one timestep '''
 
+        # prune_layer(action) # perform action via MARCUS' function
+
+        reward = self._calculate_reward()
+        new_state = self._get_state()
+        
+        if self.xp_count == self.expis:
+            done = True
+            self.xp_count = 0
+        else:
+            done = False
+            self.xp_count +=1
+
+        return new_state, reward, done
 
 
     def reset(self):
