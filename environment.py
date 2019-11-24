@@ -113,7 +113,8 @@ class PruningEnv:
         return conv_layer
 
     def _train_model(self, num_epochs=10): 
-        """ trains the model being pruned """
+        ''' Helper tool for _calculate_reward(),
+            trains the model being pruned '''
         
         loss_func = nn.CrossEntropyLoss()
         optimizer = optim.Adam(self.model.parameters(0.001))
@@ -151,7 +152,8 @@ class PruningEnv:
         #print('Training Done')
 
     def _evaluate_model(self):
-        '''evaluates the model being pruned'''
+        ''' Helper tool for _calculate_reward(),
+            evaluates the model being pruned'''
 
         self.model.eval()
         print('Evaluating CNN model''')
@@ -176,7 +178,8 @@ class PruningEnv:
                 
     
     def _estimate_layer_flops(self):
-        ''' estimate conv layer flops,
+        ''' Helper tool for _calculate_reward(),
+            estimate conv layer flops,
             same as in AMC implementation '''
 
         for name, module in self.model.named_modules():
