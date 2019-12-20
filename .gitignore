@@ -2,11 +2,11 @@
 *
 
 # Except these files..
-#!.gitignore
-#!labrat_reyes/
-#!misc/
-#!small_scale_implementation/
+!.gitignore
+!labrat_reyes/
+!misc/
+!small_scale_implementation/
 
 #small_scale_implementation/*
-#!*.py
+!small_scale_implementation/*.py
 
