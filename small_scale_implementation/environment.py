@@ -21,7 +21,7 @@ import numpy as np
 class PruningEnv:
     # NOTE: will prune a single layer for now
 
-    def __init__(self, dataset, model_type):
+    def __init__(self, dataset='cifar10', model_type='basic'):
 
         # assign dataset
         self.dataset = dataset
@@ -93,7 +93,7 @@ class PruningEnv:
     def _get_state(self): # class private method, 
                            #access via: _PruningEnv__get_state()
         ''' Helper tool for step(), 
-            gets the layer/state'''
+            gets the layer/state '''
         
         # get conv layer 
         # may keep an external pth file for original model
@@ -112,7 +112,7 @@ class PruningEnv:
         # return processed state
         return conv_layer
 
-    def _train_model(self, num_epochs=10): 
+   def _train_model(self, num_epochs=10): 
         ''' Helper tool for _calculate_reward(),
             trains the model being pruned '''
         
@@ -149,7 +149,7 @@ class PruningEnv:
             print('Epoch [{}/{}] Step [{}/{}] | Loss: {:.4f} Acc: {:.4f} Time: {}'
                     .format(epoch+1, num_epochs, idx+1, len(self.train_dl), 
                             loss.item(), train_acc[-1], str_time))
-        #print('Training Done')
+        print('Training Done')
 
     def _evaluate_model(self):
         ''' Helper tool for _calculate_reward(),
@@ -176,7 +176,6 @@ class PruningEnv:
         
         return val_acc
                 
-    
     def _estimate_layer_flops(self):
         ''' Helper tool for _calculate_reward(),
             estimate conv layer flops,
