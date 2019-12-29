@@ -145,7 +145,10 @@ def filterpruneindice(layer_number, indices, net, device, amount_to_prune):
     
     #iterate through all the parameters of the network
     for layer in net.children():
-        
+        #hardcode to find the last conv layer
+        #this is not needed for now as long as you set the last batchnorm layer to 0
+        #proven empirically on the 3 layer 3*3 network
+            
         #If convolutional layer
         if type(layer) == nn.Conv2d:
             
