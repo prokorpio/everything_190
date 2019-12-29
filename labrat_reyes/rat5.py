@@ -101,7 +101,24 @@ def simpleprune(layer, amount_to_prune, net, device):
                     print(param.data[j], "post")
                     
                     pruned_count = pruned_count + 1
-                
+def maskbuildbias(indices,sizes):
+    mask0 = torch.zeros(0).to(device)
+    mask1 = torch.ones(1).to(device)
+    
+    for i, val in enumerate(indices):
+        if i == 0:
+            if val == 0:
+                finalmask = mask0
+            else:
+                finalmask = mask1
+        else:
+            if val == 0:
+                finalmask = torch.cat((finalmask, mask0),0)
+            else:
+                finalmask = torch.cat((finalmask, mask1),0)
+    
+    return finalmask
+        
 def filterprune(layer_number, amount_to_prune, net, device):
     iter = 0
     
@@ -168,6 +185,7 @@ mylenet = Mylenet()
 mylenet.to(device)
 
 print("Skipping Training")
+
 for epoch in range(0):
     pass
 #Load a pretrained model
@@ -200,3 +218,6 @@ with torch.no_grad():
 
 print('Accuracy of the network on the 10000 test images: %f' % (100 * correct / total))   
 print('Unpruned network has 64%ish accuracy')    
+
+print("maskbuilding bias")
+print(maskbuildbias([0,0,1,1,0,0], 0))
