@@ -6,7 +6,7 @@ import torchvision.transforms as transforms
 
 
 import torch.nn as nn
-import torch.nn.functional as f
+import torch.nn.functional as F
 
 import torch.optim as optim
 import numpy as np
@@ -39,37 +39,42 @@ inputsize = 32*32*3
 class Mylenet(nn.Module):
     def __init__(self):
     
-        filters = 3
+        filters = 64
         super(Mylenet, self).__init__()
-        self.conv1 = nn.Conv2d(3, filters,3,stride = 2).cuda()
-        self.conv2 = nn.Conv2d(filters,filters,3,stride = 2).cuda()
-        self.conv3 = nn.Conv2d(filters,filters,3,stride = 2).cuda()
-        self.dropout = nn.Dropout(p = 0.3).cuda()
-        self.bn1 = nn.BatchNorm2d(3).cuda()
-        self.bn2 = nn.BatchNorm2d(3).cuda()
-        self.bn3 = nn.BatchNorm2d(3).cuda()
-        self.fc1 = nn.Linear(3*3*3, 10).cuda()#why is it 262144
+        self.conv1 = nn.Conv2d(3, filters,3,stride=2)
+        self.conv2 = nn.Conv2d(filters,filters*2,3)
+        self.conv3 = nn.Conv2d(filters*2,filters*4,3,stride=2)
+        self.conv4 = nn.Conv2d(filters*4, filters*8, 3,stride = 1)
+        self.dropout = nn.Dropout(p = 0.3)
+        self.bn1 = nn.BatchNorm2d(filters)
+        self.bn2 = nn.BatchNorm2d(filters*2)
+        self.bn3 = nn.BatchNorm2d(filters*4)
+        self.bn4= nn.BatchNorm2d(filters*8)
+        self.fc1 = nn.Linear((filters*8)*4*4, 10)
         # self.fc2 = nn.Linear(1024, 1024).cuda()
         # self.fc3 = nn.Linear(1024, 10).cuda()
-        self.sigmoid = nn.Sigmoid().cuda()
-        self.softmax = nn.Softmax(1).cuda()
+        #self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax(1)
 
     def forward(self, x):
-        x = x.to(device)
-        x = f.relu(self.conv1(x))
+        #x = x.to(device)
+        x = F.relu(self.conv1(x))
         x = self.dropout(x)
         x = self.bn1(x)
-        x = f.relu(self.conv2(x))
+        x = F.relu(self.conv2(x))
         x = self.dropout(x)
         x = self.bn2(x)
-        x = f.relu(self.conv3(x))
+        x = F.relu(self.conv3(x))
         x = self.dropout(x)
         x = self.bn3(x)
-        x = x.view(-1,3*3*3)
+        x = F.relu(self.conv4(x))
+        x = self.dropout(x)
+        x = self.bn4(x)
+        x = x.view(-1,512*4*4)
         x = (self.fc1(x))#Dense
         x = self.softmax(x)
+
         return x
-                
 def maskbuildbias(indices):
     mask0 = torch.zeros(1).to(device)
     mask1 = torch.ones(1).to(device)
@@ -139,10 +144,12 @@ def maskbuildweight2(prev_indices, kernel1, kernel2):
     
     return finalmask
 
+
+###layer number starts at 0
 def filterpruneindice(layer_number, indices, net, device, amount_to_prune):
     iter = 0
     iterbn = 0
-    
+    print("NUM_indices", indices.shape)
     #iterate through all the parameters of the network
     for layer in net.children():
         #hardcode to find the last conv layer
@@ -151,7 +158,7 @@ def filterpruneindice(layer_number, indices, net, device, amount_to_prune):
             
         #If convolutional layer
         if type(layer) == nn.Conv2d:
-            
+            print("Am at layer", iter)
             #If not the layer to be pruned, skip the below
             if iter != layer_number and iter != layer_number + 1:
                 iter = iter + 1
@@ -196,7 +203,7 @@ def filterpruneindice(layer_number, indices, net, device, amount_to_prune):
                         print("THIS HAPPENED FOR LAYER NUMBER",layer_number)
                         mask = maskbuildweight2(indices, a[2], a[3])
                         # print("MASK SHAPE", mask.shape)
-                        masktuple = ((mask),)*a[1]
+                        masktuple = ((mask),)*a[0]
                         finalmask = torch.stack((masktuple),0)
                         # print("FINAL MASK SHAPE", finalmask.shape)
                         
@@ -204,6 +211,8 @@ def filterpruneindice(layer_number, indices, net, device, amount_to_prune):
                     # print(param.data,"BEFORE")
                     # print(finalmask.size())
                     # print(param.data.size())
+                    print(param.data.shape,"SIZE")
+                    print(finalmask.shape,"SIZE")
                     param.data = torch.mul(param.data,finalmask.to(device))
                     # print(param.data,"AFTER")
             iter = iter + 1    
@@ -224,6 +233,17 @@ def filterpruneindice(layer_number, indices, net, device, amount_to_prune):
 mylenet = Mylenet()
 mylenet.to(device)
 
+#Get the number of filters per layer
+filter_amount = [0,0,0,0]
+layer_idx = 0
+for layer in mylenet.children():
+    if type(layer) == nn.Conv2d:
+        for j, param in enumerate(layer.parameters()):
+            filter_amount[layer_idx] = param.size()[0]
+        layer_idx += 1
+
+for ele in filter_amount:
+    print(ele, "ELE")
 print("Skipping Training")
 
 criterion = nn.CrossEntropyLoss()
@@ -250,7 +270,7 @@ for epoch in range(0):
 
 print('Finished Training')
 #Load a pretrained model
-PATH = os.getcwd() + '\cifar_net_rat7_2.pth'
+PATH = os.getcwd() + '\cifar_net_rat10.pth'
 # This has a performance of 51%
 # torch.save(mylenet.state_dict(), PATH)
 mylenet.load_state_dict(torch.load(PATH))
@@ -274,22 +294,22 @@ with torch.no_grad():
         correct += (predicted == labels).sum().item()
 
 print('Accuracy of the nonindices network on the 10000 test images: %f' % (100 * correct / total))   
-print('Unpruned network has 64%ish accuracy')   
+print('Unpruned network has 54%ish accuracy')   
 
 # for layer in mylenet.children():
     # print(layer)
 # print("ENDOFLAYER")
 
-amount_to_prune = 1
-indices = torch.cat((torch.zeros(amount_to_prune).to(device),torch.ones(3-amount_to_prune).to(device)),0)
-filterpruneindice(0, indices, mylenet, device,1)
 
-amount_to_prune = 2
-indices = torch.cat((torch.zeros(amount_to_prune).to(device),torch.ones(3-amount_to_prune).to(device)),0)
-filterpruneindice(2, indices, mylenet, device,1)
+amount_to_prune = 1
+layer_to_prune = 2 #this starts at 0
+indices = torch.cat((torch.zeros(amount_to_prune).to(device),torch.ones(filter_amount[layer_to_prune]-amount_to_prune).to(device)),0)
+filterpruneindice(layer_to_prune, indices, mylenet, device,1)
+
 
 print("INDICEPARAMETERS")
 print(mylenet.state_dict())
+
 
 
 correct = 0
@@ -304,8 +324,6 @@ with torch.no_grad():
         outputs = mylenet(inputs)
         _, predicted  = torch.max(outputs.data, 1)
         total += labels.size(0)
-        # print(predicted, "predicted")
-        # print(labels,"labels")
         correct += (predicted == labels).sum().item()
 
 print('Accuracy of the nonindices1 network on the 10000 test images: %f' % (100 * correct / total))   
