@@ -245,6 +245,97 @@ class PruningEnv:
 
         return new_state, reward, done
 
-
+    
     def reset(self):
         ''' gives starting state '''
+        
+        
+    ''' added filter pruning function '''
+    ''' layer_number = the layer to be pruned starts from 0 to 4 '''
+    ''' indices = tensor of indices to be pruned i.e. [0,0,0,0,1,1,1,0,1,1,1,0...]'''
+    ''' net = network to be pruned '''
+    ''' device = cuda if cuda '''
+    ''' amount_to_prune = deprecated value. previously used for generating indices '''
+    def filterpruneindice(layer_number, indices, net, device, amount_to_prune):
+    iter = 0
+    iterbn = 0
+    print("NUM_indices", indices.shape)
+    #iterate through all the parameters of the network
+    for layer in net.children():
+        #hardcode to find the last conv layer
+        #this is not needed for now as long as you set the last batchnorm layer to 0
+        #proven empirically on the 3 layer 3*3 network
+            
+        #If convolutional layer
+        if type(layer) == nn.Conv2d:
+            print("Am at layer", iter)
+            #If not the layer to be pruned, skip the below
+            if iter != layer_number and iter != layer_number + 1:
+                iter = iter + 1
+                continue
+                
+            #enumerate through all the contents of the layer.
+            #use a different mask depending on whether this is current or next
+            #there should be no bias change if this is for the next
+            #for a conv layer thats: 1. weights 2. biases
+            for i, param in enumerate(layer.parameters()):
+            
+                #use the param size to determine if weight or bias
+                a = param.size()
+                
+                #If bias 
+                #then make the mask for current only
+                if (len(a) == 1):
+
+                    #it has to be stacked conditions so that it doesn't go to the "else"
+                    if iter == layer_number:
+                        # print("A",a[0])
+                        
+                        #Multiply param.data with a mask of zeros up to the desired index, all else are filled with ones
+                        
+                        mask = maskbuildbias(indices)
+                        param.data = torch.mul(param.data,mask)
+
+                        
+                        #Iterate the cnn layer counter
+                #If weights
+                else:
+                    print(a,"a")
+                    print(a[1],"Num filter", a[2],"KernelSize")
+                    #mask per channel
+                    if iter == layer_number:
+                        mask = maskbuildweight(indices, a[2])
+                        # print("MASK SHAPE", mask.shape)
+                        masktuple = ((mask),)*a[1]
+                        finalmask = torch.stack((masktuple),1)
+                        # print("FINAL MASK SHAPE", finalmask.shape)
+                    elif iter == layer_number+1:
+                        print("THIS HAPPENED FOR LAYER NUMBER",layer_number)
+                        mask = maskbuildweight2(indices, a[2], a[3])
+                        # print("MASK SHAPE", mask.shape)
+                        masktuple = ((mask),)*a[0]
+                        finalmask = torch.stack((masktuple),0)
+                        # print("FINAL MASK SHAPE", finalmask.shape)
+                        
+                    # finalmask = torch.cat((finalmask,mask),2)
+                    # print(param.data,"BEFORE")
+                    # print(finalmask.size())
+                    # print(param.data.size())
+                    print(param.data.shape,"SIZE")
+                    print(finalmask.shape,"SIZE")
+                    param.data = torch.mul(param.data,finalmask.to(device))
+                    # print(param.data,"AFTER")
+            iter = iter + 1    
+        if type(layer) == nn.BatchNorm2d:
+            for i , param in enumerate(layer.parameters()):
+                if iterbn == layer_number:
+                    # print("A",a[0])
+                    
+                    #Multiply param.data with a mask of zeros up to the desired index, all else are filled with ones
+                    mask = maskbuildbias(indices)
+                    print(mask, "MASK")
+                    # print(param.data)
+                    param.data = torch.mul(param.data,mask)
+            iterbn = iterbn + 1
+            
+
