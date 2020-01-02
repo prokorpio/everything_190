@@ -33,6 +33,7 @@ class REINFORCE_agent():
         
 
     # TODO: change this to get_action_distrib 
+    
     def get_action(self, state):
         state = torch.from_numpy(state).float().unsqueeze(0) # tensor convert for backprop compat
                                                              # unsqueeze bc batch-dim expected @ dim=0
@@ -43,7 +44,6 @@ class REINFORCE_agent():
         action_log_prob = torch.log(action_prob_distrib.squeeze(0)[sampled_action])
         
         return sampled_action, action_log_prob
-
 
     def update_policy(self, episode_rewards, log_probs):
 
@@ -69,9 +69,10 @@ class REINFORCE_agent():
         objective_func.backward()  # assigns grad attribute to all Variables
         self.policy.Adamizer.step() # gradient ascent step
 
+        
 
 # =====================USE AGENT=============================
-
+'''
 # Pre-training Setup
 
 # Create Environment
@@ -167,7 +168,7 @@ env.close()
     
 # TODO:
 # make device explicit(gpu or cpu)
-
+'''
 
 
 

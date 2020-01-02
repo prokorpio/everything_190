@@ -3,6 +3,7 @@
 
 # Import Libraries
 import os
+import copy
 
 import torch
 import torchvision.transforms as tf
@@ -19,7 +20,6 @@ import numpy as np
 
 
 class PruningEnv:
-    # NOTE: will prune a single layer for now
 
     def __init__(self, dataset='cifar10', model_type='basic'):
 
@@ -30,7 +30,11 @@ class PruningEnv:
         # build chosen model to prune
         self.model_type = model_type
         self.model = self.build_model_to_prune()
-        # may pre-train the model here for N epochs
+        print("Starting Pre-Training")
+        self._train_model(num_epochs=10)
+        self.init_full_weights = copy.deepcopy(self.model.state_dict()) 
+                                    # initially, model to be pruned has full-params
+                                    # used in reset()
 
         # state
         self.layer_to_process = None # Layer to process, 
@@ -38,8 +42,8 @@ class PruningEnv:
         self.state_size = 64 # TODO: Ask kuya Lejan what to use
 
         # per episode
-        self.expis = 5    # num of experience before backprop for agent       
-        self.xp_count = 0 # count xp for now, stopping is controlled 
+        #self.expis = 5    # num of experience before backprop for agent       
+        #self.xp_count = 0 # count xp for now, stopping is controlled 
                           # by the reward value not chaning any more
 
     def prune_layer(self, layer_number, indices, device, amount_to_prune):
@@ -180,10 +184,8 @@ class PruningEnv:
             print('model not available') #TODO: use proper handling
             return -1
 
-    def _get_state(self): # class private method, 
-                           #access via: _PruningEnv__get_state()
-        ''' Helper tool for step(), 
-            gets the layer/state '''
+    def get_state(self): 
+        ''' Gets the layer/state '''
         
         # get conv layer 
         # may keep an external pth file for original model
@@ -300,9 +302,9 @@ class PruningEnv:
        
         return layer_flops
 
-    def _calculate_reward(self): 
-        ''' Helper tool for step(), 
-            performs the ops to get reward'''
+    def calculate_reward(self): 
+        ''' Performs the ops to get reward 
+            of action of current layer'''
 
         # train for M epochs
         self._train_model(num_epochs=2)
@@ -318,26 +320,27 @@ class PruningEnv:
 
         return reward
 
-    def step(self, action):
-        ''' Run one timestep '''
+    #def step(self, action):
+        #''' Run one timestep '''
 
         # prune_layer(action) # perform action via MARCUS' function
 
-        reward = self._calculate_reward()
-        new_state = self._get_state()
+        #reward = self._calculate_reward()
+        #new_state = self._get_state()
         
-        if self.xp_count == self.expis:
-            done = True
-            self.xp_count = 0
-        else:
-            done = False
-            self.xp_count +=1
+        #if self.xp_count == self.expis:
+        #    done = True
+        #    self.xp_count = 0
+        #else:
+        #    done = False
+        #    self.xp_count +=1
 
-        return new_state, reward, done
+        #return new_state, reward#, done
 
-    
     def reset(self):
-        ''' gives starting state '''
+        ''' resets CNN to full params'''
+        self.model.load_state_dict(self.init_full_weights)
+
         
         
 
