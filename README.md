@@ -2,7 +2,7 @@
 this repo contains all our codes for EEE 190
 
 ## Table of Contents
-1. [small_scale_implementation](small_scale_implementation) : RL pruner implementation on a 4-layer CNN
+1. [small_scale_implementation/](small_scale_implementation) : RL pruner implementation on a 4-layer CNN
   >1. [REINFORCE_agent.py](small_scale_implementation/REINFORCE_agent.py)
   >2. [environment.py](small_scale_implementation/environment.py)
   >3. [model.py](small_scale_implementation/model.py)
