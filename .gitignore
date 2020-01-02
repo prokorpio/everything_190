@@ -14,6 +14,6 @@ small_scale_implementation/state_encoder.py
 
 small_scale_implementation/temp_files/*
 !small_scale_implementation/temp_files/*.ipynb
-
+!small_scale_implementation/temp_files/*.py
 
 

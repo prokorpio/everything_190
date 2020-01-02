@@ -6,11 +6,13 @@ import os
 import copy
 
 import torch
+import torch.functional as F
 import torchvision.transforms as tf
 import torchvision.datasets as ds
 import torch.utils.data as data
 
 import models_to_prune 
+from temp_files.state_rep_autoencoder import autoencoder
 
 import torch.nn as nn
 import torch.optim as optim
@@ -39,12 +41,17 @@ class PruningEnv:
         # state
         self.layer_to_process = None # Layer to process, 
                                      # str name is usr-identified 
-        self.state_size = 64 # TODO: Ask kuya Lejan what to use
+        self.state_size = 64 
+        autoenc = autoencoder(self.state_size)
+        pretrained_autoenc_dict = torch.load('conv_autoencoder.pth')
+        autoenc.load_state_dict(pretrained_autoenc_dict)
+        autoenc.eval() # dont store grads   
+        self.state_encoder = autoenc.encoder
 
         # per episode
         #self.expis = 5    # num of experience before backprop for agent       
         #self.xp_count = 0 # count xp for now, stopping is controlled 
-                          # by the reward value not chaning any more
+                          # by the reward value not changing any more
 
     def prune_layer(self, layer_number, indices, device, amount_to_prune):
         ''' added filter pruning function 
@@ -189,20 +196,33 @@ class PruningEnv:
         
         # get conv layer 
         # may keep an external pth file for original model
-        for name, module in self.model.named_modules():
+        for name, module in self.model.named_modules(): # this model changes
             if self.layer_to_process in name:
-                #conv_layer_name = name
                 conv_layer = module
                 break
 
-        #print(conv_layer_name)
-        print('weight:',type(conv_layer.weight))
-        print('bias:', type(conv_layer.bias))
-
-        #TODO: process layer with kuya Lejan's state-rep
+        filter_weights = conv_layer.weight.data.clone() # copy params
+        #TODO: what about the bias tensor ?
+        pooled_filter = torch.squeeze(F.avg_pool2d(filter_weights,
+                                                   filter_weights.size()[-1]))
+        pooled_filter = pooled_filter*1000 # scale up magnitudes for encoder
+        padded_state_rep = torch.zeros([1,512,16,16]) # largest pooled filter
+                                                      # size is [512,256].
+                                                      # think of 1 as batchsize
+        size = pooled_filter.size()
+        w = int(size[1]**0.5) # always round down
+        h = size[1] // w
+        r = size[1] % w # remainder, h*w + r should be = size[1]
+        padded_state_rep[:size[0], :h, :w] = \
+                                pooled_filter[size[0], :h*w].view(size[0],h,w)
+        # additional row for remaining values
+        padded_state_rep[:size[0], :h+1, :r] = \
+                                pooled_filter[size[0], h*w:].view(size[0],1,r)
+        # encode to fixed-dim vector
+        state_rep = self.state_encoder(padded_state_rep)
 
         # return processed state
-        return conv_layer
+        return state_rep
 
     def _train_model(self, num_epochs=10): 
         ''' Helper tool for _calculate_reward(),
