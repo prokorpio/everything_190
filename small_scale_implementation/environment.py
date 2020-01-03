@@ -52,7 +52,78 @@ class PruningEnv:
         #self.expis = 5    # num of experience before backprop for agent       
         #self.xp_count = 0 # count xp for now, stopping is controlled 
                           # by the reward value not changing any more
+    
+    def maskbuildbias(indices):
+        mask0 = torch.zeros(1).to(device)
+        mask1 = torch.ones(1).to(device)
 
+        for i, val in enumerate(indices):
+            if i == 0:
+                if val == 0:
+                    finalmask = mask0
+                else:
+                    finalmask = mask1
+            else:
+                if val == 0:
+                    finalmask = torch.cat((finalmask, mask0),0)
+                else:
+                    finalmask = torch.cat((finalmask, mask1),0)
+        return finalmask
+
+    #This thing is stacked too
+    def maskbuildweight(indices, kernelsize):
+        mask0 = torch.zeros((1,kernelsize, kernelsize))
+        mask1 = torch.ones((1,kernelsize, kernelsize))
+
+        for i, val in enumerate(indices):
+            #initialize the mask
+            if i == 0:
+                if val == 0:
+                    finalmask = mask0
+                else:
+                    finalmask = mask1
+            #concatenate the masks
+            else:
+                if val == 0:
+                    finalmask = torch.cat((finalmask, mask0),0)
+                else:
+                    finalmask = torch.cat((finalmask, mask1),0)
+            # print("finalmaskshape", finalmask.shape)
+        # print(finalmask)
+        return finalmask
+
+    #for next layer
+    #you build the mask based on the 
+    #previous layer's indices but stack it according to this layer's indices
+    def maskbuildweight2(prev_indices, kernel1, kernel2):
+        mask0 = torch.zeros((1,kernel1, kernel2))
+        mask1 = torch.ones((1,kernel1, kernel2))
+
+        #build on a per channel basis
+        for i, val in enumerate(prev_indices):
+            #initialize the mask
+            if i == 0:
+                if val == 0:
+                    finalmask = mask0
+                else:
+                    finalmask = mask1
+            #concatenate the masks
+            else:
+                if val == 0:
+                    finalmask = torch.cat((finalmask, mask0),0)
+                else:
+                    finalmask = torch.cat((finalmask, mask1),0)
+            # print("finalmaskshape", finalmask.shape)
+
+
+        #stack on a per filter basis
+        #meaning change torch.stack dimension to 0
+        #but masktuple is still multiplied by number of filters since it is about hte current layers filters
+
+        return finalmask
+
+    
+    
     def prune_layer(self, layer_number, indices, device, amount_to_prune):
         ''' added filter pruning function 
             Args: 
