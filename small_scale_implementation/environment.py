@@ -53,6 +53,11 @@ class PruningEnv:
         #self.xp_count = 0 # count xp for now, stopping is controlled 
                           # by the reward value not changing any more
     
+    
+    ###Builds a mask for the bias of the layer to be pruned. Sub function of prune_layer
+    '''Args:
+        indices = list of indices to be pruned. i.e. [0,1,1,0,0,1,1,0,1,0...]'''
+    
     def maskbuildbias(indices):
         mask0 = torch.zeros(1).to(device)
         mask1 = torch.ones(1).to(device)
@@ -70,7 +75,10 @@ class PruningEnv:
                     finalmask = torch.cat((finalmask, mask1),0)
         return finalmask
 
-    #This thing is stacked too
+    ###Builds a mask for the weights of the layer to be pruned. Sub function of prune_layer
+    '''Args:
+        indices = list of indices to be pruned. i.e. [0,1,1,0,0,1,1,0,1,0...]
+        kernelsize = size of the kernel of the filters, assumed to be n*n (i.e. square filters)'''
     def maskbuildweight(indices, kernelsize):
         mask0 = torch.zeros((1,kernelsize, kernelsize))
         mask1 = torch.ones((1,kernelsize, kernelsize))
@@ -92,7 +100,12 @@ class PruningEnv:
         # print(finalmask)
         return finalmask
 
-    #for next layer
+    
+    ###Builds a mask for the weights of the next layer . Sub function of prune_layer
+    ###Necessity from the previous layer's having less output feature maps
+    '''Args:
+        indices = list of indices to be pruned. i.e. [0,1,1,0,0,1,1,0,1,0...]
+        kernel1, kernel2 = n*m kernel size.'''
     #you build the mask based on the 
     #previous layer's indices but stack it according to this layer's indices
     def maskbuildweight2(prev_indices, kernel1, kernel2):
