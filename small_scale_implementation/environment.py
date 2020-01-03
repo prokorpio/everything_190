@@ -130,7 +130,7 @@ class PruningEnv:
                 layer_number = the layer to be pruned starts from 0 to 4 
                 indices = tensor of indices to be pruned i.e. [0,0,0,0,1,1,1,0,1,1,1,0...]
                 self.model = network to be pruned 
-                device =  device to be used  #TODO: put this in init? 
+                device =  device to be used  #TODO: put this in init? Just a necessity of my editing the mask using GPU tensors. It can be changed if really needed -Reyes
                 amount_to_prune = deprecated value. previously used for generating indices '''
 
         iter_ = 0
