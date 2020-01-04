@@ -9,6 +9,8 @@ this repo contains all our codes for EEE 190
   >4. [models_to_prune.py](small_scale_implementation/models_to_prune.py) : Various CNN modules to run pruning algo onto
   >5. [main.py](small_scale_implementation/main.py) : Main algorithm utilizing subroutines from above
   >6. [temp_files/](small_scale_implementation/temp_files) : necessary parts needing further iterative work
+  >7. [best_snapshot_78.pt](best_snapshot_78.pt) : fine-tuned model of the 4-layer CNN
+  >8. [rat11.py](rat11.py) : sample code that evaluates the fine-tuned model, prunes a layer, the re-evaluates
 2. [labrat_reyes/](labrat_reyes)
 3. [misc/](misc) : Various unused files
   >1. [CompressionImageNetLinks.txt](misc/CompressionImageNetLinks.txt)
