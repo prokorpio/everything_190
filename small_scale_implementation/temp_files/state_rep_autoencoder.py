@@ -107,8 +107,8 @@ for i in range(val_rep):
 # Build Autoencoder Class
 
 class autoencoder(nn.Module):
-    def __init__(self):
-        super(autoencoder, self).__init__(encoding_dim = 64)
+    def __init__(self, encoding_dim = 64):
+        super(autoencoder, self).__init__()
         self.encoding_dim = encoding_dim 
         self.encoder = nn.Sequential( # input size is [512,16,16]
             nn.Conv2d(512, 256, 3),  # b, 256, 14, 14

@@ -6,7 +6,6 @@ import os
 import copy
 
 import torch
-import torch.functional as F
 import torchvision.transforms as tf
 import torchvision.datasets as ds
 import torch.utils.data as data
@@ -15,6 +14,7 @@ import models_to_prune
 from temp_files.state_rep_autoencoder import autoencoder
 
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import time
 
@@ -23,7 +23,9 @@ import numpy as np
 
 class PruningEnv:
 
-    def __init__(self, dataset='cifar10', model_type='basic'):
+    def __init__(self, dataset='cifar10', 
+                 model_type='basic',
+                 state_size = 64):
 
         # assign dataset
         self.dataset = dataset
@@ -38,13 +40,16 @@ class PruningEnv:
         self.init_full_weights = copy.deepcopy(self.model.state_dict()) 
                                     # initially, model to be pruned has full-params
                                     # used in reset()
-        self.trained_weights = copy.deepcopy(torch.load(os.getcwd() + '\\best_snapshot_78.pt'))
+        self.trained_weights = copy.deepcopy(torch.load(os.getcwd() + \
+                                                    '/best_snapshot_78.pt',
+                                                    map_location=self.device))
         # state
         self.layer_to_process = None # Layer to process, 
                                      # str name is usr-identified 
-        self.state_size = 64 
+        self.state_size = state_size 
         autoenc = autoencoder(self.state_size)
-        pretrained_autoenc_dict = torch.load('conv_autoencoder.pth')
+        pretrained_autoenc_dict = torch.load('conv_autoencoder.pth',
+                                             map_location=self.device)
         autoenc.load_state_dict(pretrained_autoenc_dict)
         autoenc.eval() # dont store grads
         self.state_encoder = autoenc.encoder
@@ -53,167 +58,6 @@ class PruningEnv:
         #self.expis = 5    # num of experience before backprop for agent       
         #self.xp_count = 0 # count xp for now, stopping is controlled 
                           # by the reward value not changing any more
-    
-    
-    ###Builds a mask for the bias of the layer to be pruned. Sub function of prune_layer
-    '''Args:
-        indices = list of indices to be pruned. i.e. [0,1,1,0,0,1,1,0,1,0...]'''
-    
-    def maskbuildbias(self, indices):
-        mask0 = torch.zeros(1).to(self.device)
-        mask1 = torch.ones(1).to(self.device)
-
-        for i, val in enumerate(indices):
-            if i == 0:
-                if val == 0:
-                    finalmask = mask0
-                else:
-                    finalmask = mask1
-            else:
-                if val == 0:
-                    finalmask = torch.cat((finalmask, mask0),0)
-                else:
-                    finalmask = torch.cat((finalmask, mask1),0)
-        return finalmask
-
-    ###Builds a mask for the weights of the layer to be pruned. Sub function of prune_layer
-    '''Args:
-        indices = list of indices to be pruned. i.e. [0,1,1,0,0,1,1,0,1,0...]
-        kernelsize = size of the kernel of the filters, assumed to be n*n (i.e. square filters)'''
-    def maskbuildweight(self, indices, kernelsize):
-        mask0 = torch.zeros((1,kernelsize, kernelsize))
-        mask1 = torch.ones((1,kernelsize, kernelsize))
-
-        for i, val in enumerate(indices):
-            #initialize the mask
-            if i == 0:
-                if val == 0:
-                    finalmask = mask0
-                else:
-                    finalmask = mask1
-            #concatenate the masks
-            else:
-                if val == 0:
-                    finalmask = torch.cat((finalmask, mask0),0)
-                else:
-                    finalmask = torch.cat((finalmask, mask1),0)
-            # print("finalmaskshape", finalmask.shape)
-        # print(finalmask)
-        return finalmask
-
-    
-    ###Builds a mask for the weights of the next layer . Sub function of prune_layer
-    ###Necessity from the previous layer's having less output feature maps
-    '''Args:
-        indices = list of indices to be pruned. i.e. [0,1,1,0,0,1,1,0,1,0...]
-        kernel1, kernel2 = n*m kernel size.'''
-    #you build the mask based on the 
-    #previous layer's indices but stack it according to this layer's indices
-    def maskbuildweight2(self, prev_indices, kernel1, kernel2):
-        mask0 = torch.zeros((1,kernel1, kernel2))
-        mask1 = torch.ones((1,kernel1, kernel2))
-
-        #build on a per channel basis
-        for i, val in enumerate(prev_indices):
-            #initialize the mask
-            if i == 0:
-                if val == 0:
-                    finalmask = mask0
-                else:
-                    finalmask = mask1
-            #concatenate the masks
-            else:
-                if val == 0:
-                    finalmask = torch.cat((finalmask, mask0),0)
-                else:
-                    finalmask = torch.cat((finalmask, mask1),0)
-            # print("finalmaskshape", finalmask.shape)
-
-
-        #stack on a per filter basis
-        #meaning change torch.stack dimension to 0
-        #but masktuple is still multiplied by number of filters since it is about hte current layers filters
-
-        return finalmask
-
-    
-    
-    def prune_layer(self, layer_number, indices, device, amount_to_prune):
-        ''' added filter pruning function 
-            Args: 
-                layer_number = the layer to be pruned starts from 0 to 4 
-                indices = tensor of indices to be pruned i.e. [0,0,0,0,1,1,1,0,1,1,1,0...]
-                self.model = network to be pruned 
-                device =  device to be used  #TODO: put this in init? Just a necessity of my editing the mask using GPU tensors. It can be changed if really needed -Reyes
-                amount_to_prune = deprecated value. previously used for generating indices '''
-
-        iter_ = 0
-        iterbn = 0
-
-        #iterate through all the parameters of the network
-        for layer in self.model.children():
-            #hardcode to find the last conv layer
-            #this is not needed for now as long as you set the last batchnorm layer to 0
-            #proven empirically on the 3 layer 3*3 network
-
-            #If convolutional layer
-            if type(layer) == nn.Conv2d:
-                #If not the layer to be pruned, skip the below
-                if iter_ != layer_number and iter_ != layer_number + 1:
-                    iter_ = iter_ + 1
-                    continue
-
-                #enumerate through all the contents of the layer.
-                #use a different mask depending on whether this is current or next
-                #there should be no bias change if this is for the next
-                #for a conv layer thats: 1. weights 2. biases
-                for i, param in enumerate(layer.parameters()):
-                    #use the param size to determine if weight or bias
-                    a = param.size()
-                    #If bias, then make the mask for current only
-                    if (len(a) == 1):
-
-                        #it has to be stacked conditions so that it doesn't go to the "else"
-                        if iter_ == layer_number:
-                            # print("A",a[0])
-
-                            #Multiply param.data with a mask of zeros up to the 
-                            #desired index, all else are filled with ones
-
-                            mask = self.maskbuildbias(indices)
-                            param.data = torch.mul(param.data,mask)
-
-
-                            #Iterate the cnn layer counter
-                    #If weights
-                    else:
-                        #mask per channel
-                        if iter_ == layer_number:
-                            mask = self.maskbuildweight(indices, a[2])
-                            masktuple = ((mask),)*a[1]
-                            finalmask = torch.stack((masktuple),1)
-                        elif iter_ == layer_number+1:
-                            mask = self.maskbuildweight2(indices, a[2], a[3])
-                            masktuple = ((mask),)*a[0]
-                            finalmask = torch.stack((masktuple),0)
-
-
-                        param.data = torch.mul(param.data,finalmask.to(device))
-                        # print(param.data,"AFTER")
-                iter_ = iter_ + 1    
-            if type(layer) == nn.BatchNorm2d:
-                for i , param in enumerate(layer.parameters()):
-                    if iterbn == layer_number:
-
-
-                        #Multiply param.data with a mask of zeros up to 
-                        #the desired index, all else are filled with ones
-
-                        mask = self.maskbuildbias(indices)
-
-                        # print(param.data)
-                        param.data = torch.mul(param.data,mask)
-                iterbn = iterbn + 1
 
     def get_dataloaders(self):
         ''' imports the chosen dataset '''
@@ -285,11 +129,12 @@ class PruningEnv:
         w = int(size[1]**0.5) # always round down
         h = size[1] // w
         r = size[1] % w # remainder, h*w + r should be = size[1]
-        padded_state_rep[:size[0], :h, :w] = \
-                                pooled_filter[size[0], :h*w].view(size[0],h,w)
+        padded_state_rep[:, :size[0], :h, :w] = \
+                        pooled_filter[:, :h*w].view(size[0],h,w)
         # additional row for remaining values
-        padded_state_rep[:size[0], :h+1, :r] = \
-                                pooled_filter[size[0], h*w:].view(size[0],1,r)
+        if r > 0:
+            padded_state_rep[:, :size[0], :h+1, :r] = \
+                        pooled_filter[:, h*w:].view(size[0],1,r)
         # encode to fixed-dim vector
         state_rep = self.state_encoder(padded_state_rep)
 
@@ -414,6 +259,195 @@ class PruningEnv:
 
         return reward
 
+    def maskbuildbias(self, indices):
+        ''' Builds a mask for the bias of the layer to be pruned. 
+            Sub function of prune_layer.
+
+            Args:
+                indices = list of indices to be pruned. 
+                          i.e. [0,1,1,0,0,1,1,0,1,0...]
+        '''
+        mask0 = torch.zeros(1).to(self.device)
+        mask1 = torch.ones(1).to(self.device)
+
+        for i, val in enumerate(indices):
+            if i == 0:
+                if val == 0:
+                    finalmask = mask0
+                else:
+                    finalmask = mask1
+            else:
+                if val == 0:
+                    finalmask = torch.cat((finalmask, mask0),0)
+                else:
+                    finalmask = torch.cat((finalmask, mask1),0)
+        return finalmask
+
+    def maskbuildweight(self, indices, kernelsize):
+        '''
+            Builds a mask for the weights of the layer to be pruned. 
+            Sub function of prune_layer
+
+            Args:
+                indices = list of indices to be pruned. 
+                          i.e. [0,1,1,0,0,1,1,0,1,0...]
+                kernelsize = size of the kernel of the filters, 
+                             assumed to be n*n (i.e. square filters)
+        '''
+        mask0 = torch.zeros((1,kernelsize, kernelsize))
+        mask1 = torch.ones((1,kernelsize, kernelsize))
+
+        for i, val in enumerate(indices):
+            #initialize the mask
+            if i == 0:
+                if val == 0:
+                    finalmask = mask0
+                else:
+                    finalmask = mask1
+            #concatenate the masks
+            else:
+                if val == 0:
+                    finalmask = torch.cat((finalmask, mask0),0)
+                else:
+                    finalmask = torch.cat((finalmask, mask1),0)
+            # print("finalmaskshape", finalmask.shape)
+        # print(finalmask)
+        return finalmask
+    
+    def maskbuildweight2(self, prev_indices, kernel1, kernel2):
+        ''' Builds a mask for the weights of the next layer. 
+            Sub function of prune_layer
+            Necessity from the previous layer's having less output feature maps
+            Args:
+                indices = list of indices to be pruned. 
+                          i.e. [0,1,1,0,0,1,1,0,1,0...]
+                kernel1, kernel2 = n*m kernel size.
+        '''
+        #you build the mask based on the 
+        #previous layer's indices but stack it according to this layer's indices
+        mask0 = torch.zeros((1,kernel1, kernel2))
+        mask1 = torch.ones((1,kernel1, kernel2))
+
+        #build on a per channel basis
+        for i, val in enumerate(prev_indices):
+            #initialize the mask
+            if i == 0:
+                if val == 0:
+                    finalmask = mask0
+                else:
+                    finalmask = mask1
+            #concatenate the masks
+            else:
+                if val == 0:
+                    finalmask = torch.cat((finalmask, mask0),0)
+                else:
+                    finalmask = torch.cat((finalmask, mask1),0)
+            # print("finalmaskshape", finalmask.shape)
+
+
+        # stack on a per filter basis
+        # meaning change torch.stack dimension to 0
+        # but masktuple is still multiplied by number of filters since it 
+        # is about hte current layers filters
+
+        return finalmask
+    
+    def prune_layer(self, indices):
+        ''' Added filter pruning function 
+            Args: 
+                layer_number = the layer to be pruned starts from 0 to 4 
+                indices = tensor of indices to be pruned i.e. [0,0,0,0,1,1,1,0,1,1,1,0...]
+                self.model = network to be pruned 
+        '''
+
+        iter_ = 0
+        iterbn = 0
+        
+        # ideally we get the conv layer like this - jeff
+        '''
+        named_children = self.model.named_children()
+        for name, module in named_children: 
+            if self.layer_to_process in name:
+                conv_layer = module
+                _, next_conv_layer = next(named_children)
+                break
+        '''
+
+        #iterate through all the parameters of the network
+        for layer in self.model.children():
+            #hardcode to find the last conv layer
+            #this is not needed for now as long as you set the last batchnorm layer to 0
+            #proven empirically on the 3 layer 3*3 network
+
+            #if convolutional layer
+            if type(layer) == nn.conv2d:
+                #if not the layer to be pruned, skip the below
+                if iter_ != layer_number and iter_ != layer_number + 1:
+                    iter_ = iter_ + 1
+                    continue
+
+                #enumerate through all the contents of the layer.
+                #use a different mask depending on whether this is current or next
+                #there should be no bias change if this is for the next
+                #for a conv layer thats: 1. weights 2. biases
+                for i, param in enumerate(layer.parameters()):
+                    #use the param size to determine if weight or bias
+                    size = param.size()
+                    #if bias, then make the mask for current only
+                    if (len(size) == 1):
+
+                        #it has to be stacked conditions so that it doesn't go to the "else"
+                        if iter_ == layer_number:
+                            # print("a",a[0])
+
+                            #multiply param.data with a mask of zeros up to the 
+                            #desired index, all else are filled with ones
+
+                            mask = self.maskbuildbias(indices)
+                            param.data = torch.mul(param.data,mask)
+
+
+                            #iterate the cnn layer counter
+                    #if weights
+                    else:
+                        #mask per channel
+                        if iter_ == layer_number:
+                            mask = self.maskbuildweight(indices, size[2])
+                            masktuple = ((mask),)*size[1]
+                            finalmask = torch.stack((masktuple),1)
+                        elif iter_ == layer_number+1:
+                            mask = self.maskbuildweight2(indices, size[2], size[3])
+                            masktuple = ((mask),)*size[0]
+                            finalmask = torch.stack((masktuple),0)
+
+
+                        param.data = torch.mul(param.data,
+                                               finalmask.to(self.device))
+                        # print(param.data,"after")
+                iter_ = iter_ + 1    
+            if type(layer) == nn.batchnorm2d:
+                for i , param in enumerate(layer.parameters()):
+                    if iterbn == layer_number:
+
+
+                        #multiply param.data with a mask of zeros up to 
+                        #the desired index, all else are filled with ones
+
+                        mask = self.maskbuildbias(indices)
+
+                        # print(param.data)
+                        param.data = torch.mul(param.data,mask)
+                iterbn = iterbn + 1
+
+    def reset(self):
+        ''' resets CNN to full params'''
+        self.model.load_state_dict(self.init_full_weights)
+
+    def load_trained(self):
+        '''loads a trained model'''
+        ###Alternate way of loading a state dict. Dependent on how it was saved.
+        self.model = self.trained_weights
+        
     #def step(self, action):
         #''' Run one timestep '''
 
@@ -430,15 +464,5 @@ class PruningEnv:
         #    self.xp_count +=1
 
         #return new_state, reward#, done
-
-    def reset(self):
-        ''' resets CNN to full params'''
-        self.model.load_state_dict(self.init_full_weights)
-
-    def load_trained(self):
-        '''loads a trained model'''
-        ###Alternate way of loading a state dict. Dependent on how it was saved.
-        self.model = self.trained_weights
-        
 
 

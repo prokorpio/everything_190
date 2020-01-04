@@ -35,33 +35,42 @@ class REINFORCE_agent():
     # TODO: change this to get_action_distrib 
     
     def get_action(self, state):
-        state = torch.from_numpy(state).float().unsqueeze(0) # tensor convert for backprop compat
+        #state = torch.from_numpy(state).float().unsqueeze(0) # tensor convert for backprop compat
                                                              # unsqueeze bc batch-dim expected @ dim=0
         action_prob_distrib = self.policy(state) 
-        sampled_action = np.random.choice(self.action_size, \
-                            p=np.squeeze(action_prob_distrib.detach().numpy()))
+        #action_log_prob = torch.log(action_prob_distrib) 
+        return action_prob_distrib#, action_log_prob
+        #sampled_action = np.random.choice(self.action_size, \
+        #                    p=np.squeeze(action_prob_distrib.detach().numpy()))
                                 # detach from autograd graph
-        action_log_prob = torch.log(action_prob_distrib.squeeze(0)[sampled_action])
-        
-        return sampled_action, action_log_prob
+        #action_log_prob = torch.log(action_prob_distrib.squeeze(0)[sampled_action])
 
-    def update_policy(self, episode_rewards, log_probs):
+        
+        #return sampled_action, action_log_prob
+
+    def update_policy(self, episode_rewards, actions):
 
         # Compute Return function for each experience in the episode
         returns = np.zeros_like(episode_rewards)
         Gt = 0.0
         for t in reversed(range(len(episode_rewards))): # t is timestep
-            Gt = episode_rewards[t] + self.gamma*Gt          # Return function Gt
+            Gt = episode_rewards[t] + self.gamma*Gt     # Return function Gt
             returns[t] = Gt                             # Return per time step     
         
         returns = torch.tensor(returns) 
         returns = (returns - returns.mean())/(returns.std() + 1e-9)
                              # standardized to control variance of Return
-        
-        # Compute gradients
-        J_t = [] # will summands of objective function
-        for log_prob, Gt in zip(log_probs, returns):
-            J_t.append(-log_prob*Gt) # REINFORCE policy gradient theorem, Q = Gt
+
+        expanded_returns = torch.zeros(len(returns), self.action_size)
+        for i, Gt in enumerate(returns):
+            # mult Gt only on activated channels
+            expanded_returns[i, np.where(actions[i] == 1)[0]] = Gt
+
+        # Compute gradients, 
+        J_t = expanded_returns.matmul(torch.log(actions)) 
+        #J_t = [] # will summands of objective function
+        #for log_prob, Gt in zip(log_probs, returns):
+        #    J_t.append(-log_prob*Gt) # REINFORCE policy gradient theorem, Q = Gt
          
         self.policy.Adamizer.zero_grad() # reset weight update grads to zero
         objective_func = torch.stack(J_t).sum()  # stack will concat multiple 1x1 tensors

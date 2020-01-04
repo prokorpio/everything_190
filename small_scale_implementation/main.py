@@ -1,10 +1,11 @@
 # Import libraries
+import torch
 from environment import PruningEnv
 from REINFORCE_agent import REINFORCE_agent
 
 # Define Agent, Training Env, & Hyper-params
-agent = REINFORCE_agent()
 env = PruningEnv()
+agent = REINFORCE_agent(env.state_size, 100)
 
 M = 50 # no reason, number of training episodes
 layers_to_prune = [] # will be list of string names
@@ -20,15 +21,16 @@ for episode in range(M):
     for layer_name in layers_to_prune:
         env.layer_to_process = layer_name
         # get state from orig model (or should we get from pruned model?)
-        state = env._get_state()
-        action, action_log_prob = agent.get_action(state)
-        env.prune_layer(action,layer_name)
+        state = env.get_state()
+        action = agent.get_action(state)
+        action = (action > 0.5).type(torch.int)
+        env.prune_layer(action)
         reward = env._calculate_reward()
         action_reward_buffer.append((action_log_prob,reward))  
 
     # calc cumulative reward, agent learns 
-    log_probs, rewards = zip(*action_reward_buffer)
-    agent.update_policy(rewards, log_probs)
+    actions, rewards = zip(*action_reward_buffer)
+    agent.update_policy(rewards, actions)
 
     
 
