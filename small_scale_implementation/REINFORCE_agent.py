@@ -66,6 +66,7 @@ class REINFORCE_agent():
             # mult Gt only on activated channels
             expanded_returns[i, np.where(actions[i] == 1)[0]] = Gt
 
+        print("Expanded_returns, actions", expanded_returns.shape)
         # Compute gradients, 
         J_t = expanded_returns.matmul(torch.log(actions)) 
         #J_t = [] # will summands of objective function

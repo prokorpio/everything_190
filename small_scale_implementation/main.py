@@ -5,7 +5,7 @@ from REINFORCE_agent import REINFORCE_agent
 
 # Define Agent, Training Env, & Hyper-params
 env = PruningEnv()
-agent = REINFORCE_agent(env.state_size, 100)
+agent = REINFORCE_agent(env.state_size, 512)
 
 M = 50 # no reason, number of training episodes
 layers_to_prune = [] # will be list of string names
@@ -30,6 +30,8 @@ for episode in range(M):
 
     # calc cumulative reward, agent learns 
     actions, rewards = zip(*action_reward_buffer)
+    print(actions, "Actions")
+    print(rewards, "Rewards")
     agent.update_policy(rewards, actions)
 
     

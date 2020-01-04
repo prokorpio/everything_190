@@ -146,7 +146,7 @@ class PruningEnv:
             trains the model being pruned '''
         
         loss_func = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(self.model.parameters(0.001))
+        optimizer = optim.Adam(self.model.parameters(0.00075))
         
         self.model.train()
         print('Training CNN model')
@@ -155,6 +155,8 @@ class PruningEnv:
             start_time = time.time()
             for idx, train_data in enumerate(self.train_dl):
                 inputs, labels = train_data
+                inputs = inputs.to(self.device)
+                labels = labels.to(self.device)
                 # TODO: transfer to device?
                 
                 optimizer.zero_grad()
@@ -241,7 +243,7 @@ class PruningEnv:
        
         return layer_flops
 
-    def calculate_reward(self): 
+    def _calculate_reward(self): 
         ''' Performs the ops to get reward 
             of action of current layer'''
 
@@ -256,10 +258,10 @@ class PruningEnv:
 
         # get reward as func of acc and flops
         reward = -(1-acc)*np.log(flops)
-
+        print("REWARD , ACC\n", reward, acc)
         return reward
 
-    def maskbuildbias(self, indices):
+    def maskbuildbias(self, indices, num_filters):
         ''' Builds a mask for the bias of the layer to be pruned. 
             Sub function of prune_layer.
 
@@ -269,7 +271,8 @@ class PruningEnv:
         '''
         mask0 = torch.zeros(1).to(self.device)
         mask1 = torch.ones(1).to(self.device)
-
+        indices = indices[0]
+        indices = indices[:num_filters]
         for i, val in enumerate(indices):
             if i == 0:
                 if val == 0:
@@ -283,7 +286,7 @@ class PruningEnv:
                     finalmask = torch.cat((finalmask, mask1),0)
         return finalmask
 
-    def maskbuildweight(self, indices, kernelsize):
+    def maskbuildweight(self, indices, kernelsize, num_filters):
         '''
             Builds a mask for the weights of the layer to be pruned. 
             Sub function of prune_layer
@@ -296,7 +299,10 @@ class PruningEnv:
         '''
         mask0 = torch.zeros((1,kernelsize, kernelsize))
         mask1 = torch.ones((1,kernelsize, kernelsize))
-
+        
+        #Workaround for indices [[]]
+        indices = indices[0]
+        indices = indices[:num_filters]
         for i, val in enumerate(indices):
             #initialize the mask
             if i == 0:
@@ -314,7 +320,7 @@ class PruningEnv:
         # print(finalmask)
         return finalmask
     
-    def maskbuildweight2(self, prev_indices, kernel1, kernel2):
+    def maskbuildweight2(self, prev_indices, kernel1, kernel2, num_filters_prev):
         ''' Builds a mask for the weights of the next layer. 
             Sub function of prune_layer
             Necessity from the previous layer's having less output feature maps
@@ -327,6 +333,10 @@ class PruningEnv:
         #previous layer's indices but stack it according to this layer's indices
         mask0 = torch.zeros((1,kernel1, kernel2))
         mask1 = torch.ones((1,kernel1, kernel2))
+       
+        #Workaround for indices [[]]
+        prev_indices = prev_indices[0]
+        prev_indices = prev_indices[:num_filters_prev]
 
         #build on a per channel basis
         for i, val in enumerate(prev_indices):
@@ -364,14 +374,19 @@ class PruningEnv:
         iterbn = 0
         
         # ideally we get the conv layer like this - jeff
-        '''
+
         named_children = self.model.named_children()
-        for name, module in named_children: 
-            if self.layer_to_process in name:
+        # conv1 Conv2d(3, 64, kernel_size=(3, 3), stride=(2, 2))
+        # module[0] and module[1] simultaneously
+        print(self.layer_to_process)
+        for idx, module in enumerate(named_children): 
+            print(module[0], module[1])
+            if self.layer_to_process in module[0]:
+                layer_number = idx
                 conv_layer = module
                 _, next_conv_layer = next(named_children)
                 break
-        '''
+
 
         #iterate through all the parameters of the network
         for layer in self.model.children():
@@ -380,7 +395,7 @@ class PruningEnv:
             #proven empirically on the 3 layer 3*3 network
 
             #if convolutional layer
-            if type(layer) == nn.conv2d:
+            if type(layer) == nn.Conv2d:
                 #if not the layer to be pruned, skip the below
                 if iter_ != layer_number and iter_ != layer_number + 1:
                     iter_ = iter_ + 1
@@ -392,6 +407,7 @@ class PruningEnv:
                 #for a conv layer thats: 1. weights 2. biases
                 for i, param in enumerate(layer.parameters()):
                     #use the param size to determine if weight or bias
+
                     size = param.size()
                     #if bias, then make the mask for current only
                     if (len(size) == 1):
@@ -403,37 +419,40 @@ class PruningEnv:
                             #multiply param.data with a mask of zeros up to the 
                             #desired index, all else are filled with ones
 
-                            mask = self.maskbuildbias(indices)
+                            mask = self.maskbuildbias(indices, size[0])
                             param.data = torch.mul(param.data,mask)
 
-
+                            print("Built bias mask")
                             #iterate the cnn layer counter
                     #if weights
                     else:
                         #mask per channel
                         if iter_ == layer_number:
-                            mask = self.maskbuildweight(indices, size[2])
+                            #size[2] == kernel size size[0] == num filters
+                            mask = self.maskbuildweight(indices, size[2], size[0])
                             masktuple = ((mask),)*size[1]
                             finalmask = torch.stack((masktuple),1)
                         elif iter_ == layer_number+1:
-                            mask = self.maskbuildweight2(indices, size[2], size[3])
+                            #size[2]&[3] == kernel_size size[1] = prev_num_filters
+                            mask = self.maskbuildweight2(indices, size[2], size[3], size[1])
                             masktuple = ((mask),)*size[0]
                             finalmask = torch.stack((masktuple),0)
 
-
+                        print(param.data.shape, finalmask.shape)
                         param.data = torch.mul(param.data,
                                                finalmask.to(self.device))
                         # print(param.data,"after")
                 iter_ = iter_ + 1    
-            if type(layer) == nn.batchnorm2d:
+            if type(layer) == nn.BatchNorm2d:
                 for i , param in enumerate(layer.parameters()):
                     if iterbn == layer_number:
+                        size = param.size()
 
 
                         #multiply param.data with a mask of zeros up to 
                         #the desired index, all else are filled with ones
 
-                        mask = self.maskbuildbias(indices)
+                        mask = self.maskbuildbias(indices, size[0])
 
                         # print(param.data)
                         param.data = torch.mul(param.data,mask)
