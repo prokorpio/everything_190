@@ -3,6 +3,12 @@ import torch
 from environment import PruningEnv
 from REINFORCE_agent import REINFORCE_agent
 
+import logging
+logging.basicConfig(level=logging.INFO, 
+                    format=('%(levelname)s:' +
+                            '[%(filename)s:%(lineno)d]' +
+                            ' %(message)s'))
+
 # Define Agent, Training Env, & Hyper-params
 env = PruningEnv()
 agent = REINFORCE_agent(env.state_size, 512)
@@ -20,19 +26,23 @@ for episode in range(M):
     # single rollout, layer-by-layer CNN scan
     for layer_name in layers_to_prune:
         env.layer_to_process = layer_name
+        print("===== Working on", layer_name, "layer =====")
         # get state from orig model (or should we get from pruned model?)
         state = env.get_state()
         action = agent.get_action(state)
-        action = (action > 0.5).type(torch.int)
-        env.prune_layer(action)
+        #logging.info("Actions: {}".format(action))
+        action_to_index = (action > 0.5).type(torch.int)
+        #logging.info("action_to_index sum: {}".format(action_to_index.sum()))
+        env.prune_layer(action_to_index)
+        print("Calculating reward")
         reward = env._calculate_reward()
-        action_reward_buffer.append((action_log_prob,reward))  
+        action_reward_buffer.append((action, reward))  
 
     # calc cumulative reward, agent learns 
-    actions, rewards = zip(*action_reward_buffer)
-    print(actions, "Actions")
-    print(rewards, "Rewards")
-    agent.update_policy(rewards, actions)
+    actions, rewards = zip(*action_reward_buffer) # both var are tuple wrapped
+    # actions: tuple->tensor
+    actions = torch.squeeze(torch.stack(actions)).type(torch.float)
+    agent.update_policy(rewards, actions) 
 
     
 

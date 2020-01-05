@@ -20,6 +20,11 @@ import time
 
 import numpy as np
 
+import logging
+logging.basicConfig(level=logging.INFO, 
+                    format=('%(levelname)s:' +
+                            '[%(filename)s:%(lineno)d]' +
+                            ' %(message)s'))
 
 class PruningEnv:
 
@@ -115,6 +120,7 @@ class PruningEnv:
         for name, module in self.model.named_modules(): # this model changes
             if self.layer_to_process in name:
                 conv_layer = module
+                logging.info(module)
                 break
 
         filter_weights = conv_layer.weight.data.clone() # copy params
@@ -136,7 +142,9 @@ class PruningEnv:
             padded_state_rep[:, :size[0], :h+1, :r] = \
                         pooled_filter[:, h*w:].view(size[0],1,r)
         # encode to fixed-dim vector
+        logging.info("Padded state rep: {}".format(padded_state_rep))
         state_rep = self.state_encoder(padded_state_rep)
+        logging.info("state rep: {}".format(state_rep))
 
         # return processed state
         return state_rep
@@ -174,12 +182,16 @@ class PruningEnv:
                                                         # most confident class
                 train_acc.append((prediction==labels).type(torch.double).mean())
 
-                #if (idx+1) % 1500 == 0:
-            elapsed_time = time.time() - start_time
-            str_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
-            print('Epoch [{}/{}] Step [{}/{}] | Loss: {:.4f} Acc: {:.4f} Time: {}'
-                    .format(epoch+1, num_epochs, idx+1, len(self.train_dl), 
-                            loss.item(), train_acc[-1], str_time))
+                if (idx+1) % 10 == 0:
+                    elapsed_time = time.time() - start_time
+                    str_time = time.strftime("%H:%M:%S", 
+                                             time.gmtime(elapsed_time))
+                    print(('Epoch [{}/{}] Step [{}/{}] | ' + 
+                           'Loss: {:.4f} Acc: {:.4f} Time: {}')
+                           .format(epoch+1, num_epochs, idx+1, 
+                                   len(self.train_dl), 
+                                   loss.item(), train_acc[-1], 
+                                   str_time))
         print('Training Done')
 
     def _evaluate_model(self):
@@ -248,7 +260,8 @@ class PruningEnv:
             of action of current layer'''
 
         # train for M epochs
-        self._train_model(num_epochs=2)
+        #self._train_model(num_epochs=2)
+        print("Training skipped")
 
         # test
         acc = self._evaluate_model() # acc is in {0,1}
@@ -258,7 +271,7 @@ class PruningEnv:
 
         # get reward as func of acc and flops
         reward = -(1-acc)*np.log(flops)
-        print("REWARD , ACC\n", reward, acc)
+        print("Reward:", reward)
         return reward
 
     def maskbuildbias(self, indices, num_filters):
@@ -378,9 +391,9 @@ class PruningEnv:
         named_children = self.model.named_children()
         # conv1 Conv2d(3, 64, kernel_size=(3, 3), stride=(2, 2))
         # module[0] and module[1] simultaneously
-        print(self.layer_to_process)
+        #print(self.layer_to_process)
         for idx, module in enumerate(named_children): 
-            print(module[0], module[1])
+            #print(module[0], module[1])
             if self.layer_to_process in module[0]:
                 layer_number = idx
                 conv_layer = module
@@ -422,7 +435,7 @@ class PruningEnv:
                             mask = self.maskbuildbias(indices, size[0])
                             param.data = torch.mul(param.data,mask)
 
-                            print("Built bias mask")
+                            #print("Built bias mask")
                             #iterate the cnn layer counter
                     #if weights
                     else:
@@ -438,7 +451,7 @@ class PruningEnv:
                             masktuple = ((mask),)*size[0]
                             finalmask = torch.stack((masktuple),0)
 
-                        print(param.data.shape, finalmask.shape)
+                        #print(param.data.shape, finalmask.shape)
                         param.data = torch.mul(param.data,
                                                finalmask.to(self.device))
                         # print(param.data,"after")

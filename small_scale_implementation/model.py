@@ -1,5 +1,5 @@
 # contains neural networks used by the RL agent
-
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -17,6 +17,6 @@ class PolicyNetwork(nn.Module):
     def forward(self,input_state):
         x = F.relu(self.fc1(input_state))
         x = F.relu(self.fc2(x))
-        x = F.sigmoid(self.fc3(x)) # sum over columns will be 1
+        x = torch.sigmoid(self.fc3(x)) # sum over columns will be 1
         
         return x

@@ -12,6 +12,12 @@ import torch.optim as optim # for optimizer = Adam
 #import matplotlib.pyplot as plt
 from model import PolicyNetwork
 
+import logging
+logging.basicConfig(level=logging.INFO, 
+                    format=('%(levelname)s:' +
+                            '[%(filename)s:%(lineno)d] -- ' +
+                            ' %(message)s'))
+
 class REINFORCE_agent():
     """ add description"""
 
@@ -56,7 +62,7 @@ class REINFORCE_agent():
         for t in reversed(range(len(episode_rewards))): # t is timestep
             Gt = episode_rewards[t] + self.gamma*Gt     # Return function Gt
             returns[t] = Gt                             # Return per time step     
-        
+
         returns = torch.tensor(returns) 
         returns = (returns - returns.mean())/(returns.std() + 1e-9)
                              # standardized to control variance of Return
@@ -64,17 +70,22 @@ class REINFORCE_agent():
         expanded_returns = torch.zeros(len(returns), self.action_size)
         for i, Gt in enumerate(returns):
             # mult Gt only on activated channels
-            expanded_returns[i, np.where(actions[i] == 1)[0]] = Gt
+            expanded_returns[i, np.where(actions[i] == 1)[0]] = \
+                                                    Gt.type(torch.float)
 
-        print("Expanded_returns, actions", expanded_returns.shape)
         # Compute gradients, 
-        J_t = expanded_returns.matmul(torch.log(actions)) 
-        #J_t = [] # will summands of objective function
+        logging.info("Expanded returns[0]: {}".format(expanded_returns[0]))
+        actions = torch.log(torch.transpose(actions,0,1))
+        logging.info("Actions: {}".format(actions))
+        Jt = expanded_returns.matmul(actions) 
+        logging.info("Jt = {}".format(Jt))
+        #Jt = [] # will summands of objective function
         #for log_prob, Gt in zip(log_probs, returns):
-        #    J_t.append(-log_prob*Gt) # REINFORCE policy gradient theorem, Q = Gt
+        #    Jt.append(-log_prob*Gt) # REINFORCE policy gradient theorem, Q = Gt
          
         self.policy.Adamizer.zero_grad() # reset weight update grads to zero
-        objective_func = torch.stack(J_t).sum()  # stack will concat multiple 1x1 tensors
+        objective_func = Jt.sum()
+        #objective_func = torch.stack(Jt).sum()  # stack will concat multiple 1x1 tensors
                                                  # to single vector tensor, then sum elements
         objective_func.backward()  # assigns grad attribute to all Variables
         self.policy.Adamizer.step() # gradient ascent step
