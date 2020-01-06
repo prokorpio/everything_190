@@ -18,6 +18,6 @@ this repo contains all our codes for EEE 190
 
 
 Temp commit message 758am:
-  Changed update policy np.where to be action >= 0.5 since actions itself is not binned
-  Added a partially trained network with epochs = 3
-  Added a function to reset to said epoch
+  >Changed update policy np.where to be action >= 0.5 since actions itself is not binned
+  >Added a partially trained network with epochs = 3
+  >Added a function to reset to said epoch
