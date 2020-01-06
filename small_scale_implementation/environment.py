@@ -48,6 +48,9 @@ class PruningEnv:
         self.trained_weights = copy.deepcopy(torch.load(os.getcwd() + \
                                                     '/best_snapshot_78.pt',
                                                     map_location=self.device))
+        self.partially_trained = copy.deepcopy(torch.load(os.getcwd() + \
+                                                '/partially_trained_3.pt',
+                                                map_location = self.device))
         # state
         self.layer_to_process = None # Layer to process, 
                                      # str name is usr-identified 
@@ -142,9 +145,9 @@ class PruningEnv:
             padded_state_rep[:, :size[0], :h+1, :r] = \
                         pooled_filter[:, h*w:].view(size[0],1,r)
         # encode to fixed-dim vector
-        logging.info("Padded state rep: {}".format(padded_state_rep))
+        #logging.info("Padded state rep: {}".format(padded_state_rep))
         state_rep = self.state_encoder(padded_state_rep)
-        logging.info("state rep: {}".format(state_rep))
+        #logging.info("state rep: {}".format(state_rep))
 
         # return processed state
         return state_rep
@@ -477,8 +480,19 @@ class PruningEnv:
 
     def load_trained(self):
         '''loads a trained model'''
-        ###Alternate way of loading a state dict. Dependent on how it was saved.
+        ###Alternate way of loading a state dict.
+        ###Dependent on how it was saved.
         self.model = self.trained_weights
+    
+    def reset_to_k(self):
+        '''resets CNN to partially trained model epochs = 3, batchsize = 64'''
+        #better to reload the weights since they are changed upon pruning
+        #it seems
+        self.partially_trained = copy.deepcopy(torch.load(os.getcwd() + \
+                                                '/partially_trained_3.pt',
+                                                map_location = self.device))
+        
+        self.model = self.partially_trained
         
     #def step(self, action):
         #''' Run one timestep '''

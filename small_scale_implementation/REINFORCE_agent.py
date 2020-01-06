@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO,
 class REINFORCE_agent():
     """ add description"""
 
-    def __init__(self, state_size, action_size, gamma=0.99, lr=1e-3):
+    def __init__(self, state_size, action_size, gamma=0.99, lr=2e-3):
 
         self.state_size= state_size
         self.action_size = action_size
@@ -62,19 +62,22 @@ class REINFORCE_agent():
         for t in reversed(range(len(episode_rewards))): # t is timestep
             Gt = episode_rewards[t] + self.gamma*Gt     # Return function Gt
             returns[t] = Gt                             # Return per time step     
-
+        print("Gt =" , returns)
         returns = torch.tensor(returns) 
         returns = (returns - returns.mean())/(returns.std() + 1e-9)
                              # standardized to control variance of Return
 
         expanded_returns = torch.zeros(len(returns), self.action_size)
+        print("actions", actions)
         for i, Gt in enumerate(returns):
             # mult Gt only on activated channels
-            expanded_returns[i, np.where(actions[i] == 1)[0]] = \
+            # changed from == 1 because the actions tensor is not yet binned
+            expanded_returns[i, np.where(actions[i] >=  0.5)[0]] = \
                                                     Gt.type(torch.float)
 
+        print("exp_ret", expanded_returns)
         # Compute gradients, 
-        logging.info("Expanded returns[0]: {}".format(expanded_returns[0]))
+        #logging.info("Expanded returns[0]: {}".format(expanded_returns[0]))
         actions = torch.log(torch.transpose(actions,0,1))
         logging.info("Actions: {}".format(actions))
         Jt = expanded_returns.matmul(actions) 

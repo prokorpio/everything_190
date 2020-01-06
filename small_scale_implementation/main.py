@@ -1,5 +1,6 @@
 # Import libraries
 import torch
+import time
 from environment import PruningEnv
 from REINFORCE_agent import REINFORCE_agent
 
@@ -13,19 +14,23 @@ logging.basicConfig(level=logging.INFO,
 env = PruningEnv()
 agent = REINFORCE_agent(env.state_size, 512)
 
-M = 50 # no reason, number of training episodes
+M = 5 # no reason, number of training episodes
 layers_to_prune = [] # will be list of string names
 for layer_name, _ in env.model.named_modules():
     if "conv" in layer_name:
         layers_to_prune.append(layer_name)
 
 for episode in range(M):
-    env.reset() # reset CNN to full-params
+    print("=====New Episode=====")
+    env.reset_to_k() # reset CNN to full-params
+    env._evaluate_model()
+    time.sleep(1.5)
     action_reward_buffer = [] # list of (action,reward) tuples per episode
 
     # single rollout, layer-by-layer CNN scan
     for layer_name in layers_to_prune:
         env.layer_to_process = layer_name
+        time.sleep(1.5)
         print("===== Working on", layer_name, "layer =====")
         # get state from orig model (or should we get from pruned model?)
         state = env.get_state()
