@@ -9,7 +9,7 @@
 
 
 
-
+small_scale_implementation/*
 !small_scale_implementation/*.py
 small_scale_implementation/state_encoder.py
 !small_scale_implementation/temp_files/
