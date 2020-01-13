@@ -30,7 +30,7 @@ class PruningEnv:
 
     def __init__(self, dataset='cifar10', 
                  model_type='basic',
-                 state_size = 64):
+                 state_size = 1024):
 
         # assign dataset
         self.dataset = dataset
@@ -55,12 +55,12 @@ class PruningEnv:
         self.layer_to_process = None # Layer to process, 
                                      # str name is usr-identified 
         self.state_size = state_size 
-        autoenc = autoencoder(self.state_size)
-        pretrained_autoenc_dict = torch.load('conv_autoencoder.pth',
-                                             map_location=self.device)
-        autoenc.load_state_dict(pretrained_autoenc_dict)
-        autoenc.eval() # dont store grads
-        self.state_encoder = autoenc.encoder
+        #autoenc = autoencoder(self.state_size)
+        #pretrained_autoenc_dict = torch.load('conv_autoencoder.pth',
+        #                                     map_location=self.device)
+        #autoenc.load_state_dict(pretrained_autoenc_dict)
+        #autoenc.eval() # dont store grads
+        #self.state_encoder = autoenc.encoder
 
         # per episode
         #self.expis = 5    # num of experience before backprop for agent       
@@ -123,7 +123,7 @@ class PruningEnv:
         for name, module in self.model.named_modules(): # this model changes
             if self.layer_to_process in name:
                 conv_layer = module
-                logging.info(module)
+                #logging.info(module)
                 break
 
         filter_weights = conv_layer.weight.data.clone() # copy params
@@ -134,30 +134,61 @@ class PruningEnv:
         padded_state_rep = torch.zeros([1,512,16,16]) # largest pooled filter
                                                       # size is [512,256].
                                                       # think of 1 as batchsize
-        size = pooled_filter.size()
-        w = int(size[1]**0.5) # always round down
-        h = size[1] // w
-        r = size[1] % w # remainder, h*w + r should be = size[1]
-        padded_state_rep[:, :size[0], :h, :w] = \
-                        pooled_filter[:, :h*w].view(size[0],h,w)
-        # additional row for remaining values
-        if r > 0:
-            padded_state_rep[:, :size[0], :h+1, :r] = \
-                        pooled_filter[:, h*w:].view(size[0],1,r)
-        # encode to fixed-dim vector
-        #logging.info("Padded state rep: {}".format(padded_state_rep))
-        state_rep = self.state_encoder(padded_state_rep)
-        #logging.info("state rep: {}".format(state_rep))
+        state_rep = pooled_filter.mean(axis = 1)
+        #print(state_rep.shape,"SHAPE")
+        state_rep_padded = torch.zeros([512])
+        state_rep_padded[0:state_rep.shape[0]] = state_rep.cpu()
+
+
+
+        loss_func = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(self.model.parameters(0.0008))
+        
+
+        #Fake train. To obtain gradients
+        for idx, train_data in enumerate(self.train_dl):
+                inputs, labels = train_data
+                inputs = inputs.to(self.device)
+                labels = labels.to(self.device)
+                # TODO: transfer to device?
+                
+                optimizer.zero_grad()
+                # forward
+                preds = self.model(inputs) # forward pass
+                loss = loss_func(preds,labels) # compute loss
+                
+                # backward
+                loss.backward()  # compute grads
+                for key, var in self.model.named_parameters():
+
+                    if key == self.layer_to_process + '.weight':
+                        pooled_grad = torch.squeeze(F.avg_pool2d(var.grad,
+                                                           var.grad.size()[-1]))
+                        pooled_grad = pooled_grad*1000
+                        grad_rep = pooled_grad.mean(axis = 1)
+
+                        break
+                break
+        
+        grad_rep_padded = torch.zeros([512])
+        grad_rep_padded[0:grad_rep.shape[0]] = grad_rep
+        state_rep_final = torch.cat((state_rep_padded,grad_rep_padded),0)
+
+
+
+        #temp for a verying state
+        
+
 
         # return processed state
-        return state_rep
+        return state_rep_final
 
     def _train_model(self, num_epochs=10): 
         ''' Helper tool for _calculate_reward(),
             trains the model being pruned '''
         
         loss_func = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(self.model.parameters(0.00075))
+        optimizer = optim.Adam(self.model.parameters(0.0008))
         
         self.model.train()
         print('Training CNN model')
@@ -171,13 +202,15 @@ class PruningEnv:
                 # TODO: transfer to device?
                 
                 optimizer.zero_grad()
-                
+                print("weight",self.model.conv1.weight.grad)
                 # forward
                 preds = self.model(inputs) # forward pass
                 loss = loss_func(preds,labels) # compute loss
                 
                 # backward
                 loss.backward()  # compute grads
+               
+                
                 optimizer.step() # update params w/ Adam update rule
 
                 # print accuracy
@@ -189,12 +222,12 @@ class PruningEnv:
                     elapsed_time = time.time() - start_time
                     str_time = time.strftime("%H:%M:%S", 
                                              time.gmtime(elapsed_time))
-                    print(('Epoch [{}/{}] Step [{}/{}] | ' + 
-                           'Loss: {:.4f} Acc: {:.4f} Time: {}')
-                           .format(epoch+1, num_epochs, idx+1, 
-                                   len(self.train_dl), 
-                                   loss.item(), train_acc[-1], 
-                                   str_time))
+                    # print(('Epoch [{}/{}] Step [{}/{}] | ' + 
+                           # 'Loss: {:.4f} Acc: {:.4f} Time: {}')
+                           # .format(epoch+1, num_epochs, idx+1, 
+                                   # len(self.train_dl), 
+                                   # loss.item(), train_acc[-1], 
+                                   # str_time))
         print('Training Done')
 
     def _evaluate_model(self):
@@ -224,7 +257,7 @@ class PruningEnv:
         
         return val_acc
                 
-    def _estimate_layer_flops(self):
+    def _estimate_layer_flops(self, amount_pruned):
         ''' Helper tool for _calculate_reward(),
             estimate conv layer flops,
             same as in AMC implementation '''
@@ -247,7 +280,7 @@ class PruningEnv:
         stride_h = conv_layer.stride[0]
         stride_w = conv_layer.stride[1]
         C_in = conv_layer.in_channels
-        C_out = conv_layer.out_channels
+        C_out = conv_layer.out_channels - amount_pruned
         groups = conv_layer.groups
 
         filter_steps_h = (input_h + 2*pad_h - kernel_h)/stride_h + 1  
@@ -258,24 +291,25 @@ class PruningEnv:
        
         return layer_flops
 
-    def _calculate_reward(self): 
+    def _calculate_reward(self, amount_pruned,total_filters): 
         ''' Performs the ops to get reward 
             of action of current layer'''
 
         # train for M epochs
-        #self._train_model(num_epochs=2)
-        print("Training skipped")
-
+        self._train_model(num_epochs = 0)
+        
         # test
         acc = self._evaluate_model() # acc is in {0,1}
 
         # get flops 
-        flops = self._estimate_layer_flops()
+        flops = self._estimate_layer_flops(amount_pruned)
 
         # get reward as func of acc and flops
-        reward = -(1-acc)*np.log(flops)
+        amount_pruned = amount_pruned.type(torch.float)
+        total_filters = torch.tensor(total_filters, dtype = torch.float)
+        reward = -(1-acc)*np.log(flops)#*(total_filters/amount_pruned)#np.log(flops)
         print("Reward:", reward)
-        return reward
+        return reward,acc,flops
 
     def maskbuildbias(self, indices, num_filters):
         ''' Builds a mask for the bias of the layer to be pruned. 
@@ -482,6 +516,10 @@ class PruningEnv:
         '''loads a trained model'''
         ###Alternate way of loading a state dict.
         ###Dependent on how it was saved.
+        self.trained_weights = copy.deepcopy(torch.load(os.getcwd() + \
+                                                    '/best_snapshot_78.pt',
+                                                    map_location=self.device))
+        
         self.model = self.trained_weights
     
     def reset_to_k(self):

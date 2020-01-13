@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO,
 class REINFORCE_agent():
     """ add description"""
 
-    def __init__(self, state_size, action_size, gamma=0.99, lr=2e-3):
+    def __init__(self, state_size, action_size, gamma=0.99, lr=8e-5):
 
         self.state_size= state_size
         self.action_size = action_size
@@ -41,15 +41,18 @@ class REINFORCE_agent():
     # TODO: change this to get_action_distrib 
     
     def get_action(self, state):
-        #state = torch.from_numpy(state).float().unsqueeze(0) # tensor convert for backprop compat
-                                                             # unsqueeze bc batch-dim expected @ dim=0
+        #state = torch.from_numpy(state).float().unsqueeze(0) 
+        # tensor convert for backprop compat
+        # unsqueeze bc batch-dim expected @ dim=0
+
         action_prob_distrib = self.policy(state) 
         #action_log_prob = torch.log(action_prob_distrib) 
         return action_prob_distrib#, action_log_prob
         #sampled_action = np.random.choice(self.action_size, \
-        #                    p=np.squeeze(action_prob_distrib.detach().numpy()))
+        #                 p=np.squeeze(action_prob_distrib.detach().numpy()))
                                 # detach from autograd graph
-        #action_log_prob = torch.log(action_prob_distrib.squeeze(0)[sampled_action])
+        #action_log_prob = \
+        #    torch.log(action_prob_distrib.squeeze(0)[sampled_action])
 
         
         #return sampled_action, action_log_prob
@@ -68,28 +71,30 @@ class REINFORCE_agent():
                              # standardized to control variance of Return
 
         expanded_returns = torch.zeros(len(returns), self.action_size)
-        print("actions", actions)
+        #print("actions", actions)
         for i, Gt in enumerate(returns):
             # mult Gt only on activated channels
             # changed from == 1 because the actions tensor is not yet binned
             expanded_returns[i, np.where(actions[i] >=  0.5)[0]] = \
                                                     Gt.type(torch.float)
 
-        print("exp_ret", expanded_returns)
+        #print("exp_ret", expanded_returns)
         # Compute gradients, 
         #logging.info("Expanded returns[0]: {}".format(expanded_returns[0]))
-        actions = torch.log(torch.transpose(actions,0,1))
         logging.info("Actions: {}".format(actions))
+        
+        actions = torch.log(torch.transpose(actions,0,1))
         Jt = expanded_returns.matmul(actions) 
-        logging.info("Jt = {}".format(Jt))
+        #logging.info("Jt = {}".format(Jt))
         #Jt = [] # will summands of objective function
         #for log_prob, Gt in zip(log_probs, returns):
-        #    Jt.append(-log_prob*Gt) # REINFORCE policy gradient theorem, Q = Gt
+        #    Jt.append(-log_prob*Gt) # REINFORCE policy gradient theorem,Q = Gt
          
         self.policy.Adamizer.zero_grad() # reset weight update grads to zero
         objective_func = Jt.sum()
-        #objective_func = torch.stack(Jt).sum()  # stack will concat multiple 1x1 tensors
-                                                 # to single vector tensor, then sum elements
+        #objective_func = torch.stack(Jt).sum()  
+        # stack will concat multiple 1x1 tensors
+        # to single vector tensor, then sum elements
         objective_func.backward()  # assigns grad attribute to all Variables
         self.policy.Adamizer.step() # gradient ascent step
 
