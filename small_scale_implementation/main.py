@@ -13,10 +13,10 @@ logging.basicConfig(level=logging.INFO,
 
 # Define Agent, Training Env, & Hyper-params
 env = PruningEnv()
-print(env.state_size)
+#print(env.state_size)
 agent = REINFORCE_agent(env.state_size, 512)
 
-M = 1# no reason, number of training episodes
+M = 3# no reason, number of training episodes
 layers_to_prune = [] # will be list of string names
 for layer_name, _ in env.model.named_modules():
     if "conv" in layer_name:
@@ -30,7 +30,7 @@ listflop = np.zeros([4,M])
 listvalacc = np.zeros([100])
 
 for episode in range(M):
-    print("=====",episode,"New Episode======================================")
+    print("\n=========== Episode", episode,"============")
     env.reset_to_k() # reset CNN to full-params
     #env._evaluate_model()
     action_reward_buffer = [] # list of (action,reward) tuples per episode
@@ -38,27 +38,28 @@ for episode in range(M):
     # single rollout, layer-by-layer CNN scan
     for layer_name in layers_to_prune:
         env.layer_to_process = layer_name
-        print("===== Working on", layer_name, "layer =====")
+        print("\n===== Working on", layer_name, "layer =====")
+
         # get state from orig model (or should we get from pruned model?)
         state = env.get_state()
         
+        # get action
         action = agent.get_action(state)
         action = torch.unsqueeze(action, 0)
         #logging.info("Actions: {}".format(action))
         action_to_index = (action > 0.5).type(torch.int)
         #logging.info("action_to_index sum: {}".format(action_to_index.sum()))
+
+        # perform action
         env.prune_layer(action_to_index)
-        print("Calculating reward")
+
+        # get reward
+        logging.info("Calculating reward")
         total_filters = 64*(2**(int(layer_name[-1])-1))
         amount_pruned = action_to_index[0,\
                                 0:64*(2**(int(layer_name[-1])-1))].sum()
         reward,acc,flop = env._calculate_reward(amount_pruned,total_filters)
-        
-        #reward = reward * -1
-        #it seems this doesnt matter? as long as it heads to 0
-        #        then that is the goal maybe this is a lr problem
         action_reward_buffer.append((action, reward))
-
         
         # print("For",layer_name,"pruned",action_to_index[0,\
         #                    0:64*(2**(int(layer_name[-1])-1))].sum())
@@ -72,6 +73,7 @@ for episode in range(M):
         listflop[int(layer_name[-1])-1, episode] = flop
         
     # calc cumulative reward, agent learns 
+    logging.info('Agent Learning')
     actions, rewards = zip(*action_reward_buffer) # both var are tuple wrapped
     # actions: tuple->tensor
     actions = torch.squeeze(torch.stack(actions)).type(torch.float)

@@ -233,7 +233,7 @@ class PruningEnv:
             evaluates the model being pruned'''
 
         self.model.eval()
-        print('Evaluating CNN model''')
+        logging.info('Evaluating CNN model''')
         total = 0 # total number of labels
         correct = 0 # total correct preds
 
