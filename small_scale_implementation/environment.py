@@ -288,7 +288,7 @@ class PruningEnv:
        
         return layer_flops
 
-    def _calculate_reward(self, amount_pruned,total_filters): 
+    def _calculate_reward(self, amount_pruned): 
         ''' Performs the ops to get reward 
             of action of current layer'''
 
@@ -301,15 +301,19 @@ class PruningEnv:
         logging.info('Validation Accuracy: {:.2f}%'.format(acc*100))
 
         # get flops 
-        flops = self._estimate_layer_flops(amount_pruned)
+        flops_orig = self._estimate_layer_flops(0)
+        flops_remain = self._estimate_layer_flops(amount_pruned)
 
+        flops_ratio = flops_remain / flops_orig
         # get reward as func of acc and flops
         #amount_pruned = amount_pruned.type(torch.float)
         #total_filters = torch.tensor(total_filters, dtype = torch.float)
-        reward = -(1-acc)*np.log(flops)#*(total_filters/amount_pruned)#np.log(flops)
+        #reward = -(1-acc)*(flops_ratio) 
+        reward = -(1-acc)*np.log(flops_remain)#*(total_filters/amount_pruned)#np.log(flops)
+        logging.info("%Flops: {}".format(flops_ratio))
         logging.info("Reward: {}".format(reward))
 
-        return reward, acc, flops
+        return reward, acc, flops_orig, flops_ratio
 
     def maskbuildbias(self, indices, num_filters):
         ''' Builds a mask for the bias of the layer to be pruned. 
@@ -416,32 +420,28 @@ class PruningEnv:
         ''' Added filter pruning function 
             Args: 
                 layer_number = the layer to be pruned starts from 0 to 4 
-                indices = tensor of indices to be pruned i.e. [0,0,0,0,1,1,1,0,1,1,1,0...]
+                indices = tensor of indices to be pruned 
+                          i.e. [0,0,0,0,1,1,1,0,1,1,1,0...]
                 self.model = network to be pruned 
         '''
 
         iter_ = 0
         iterbn = 0
+        amt_pruned = 0 # to be assigned in mask_per_channel condition
         
-        # ideally we get the conv layer like this - jeff
-
         named_children = self.model.named_children()
-        # conv1 Conv2d(3, 64, kernel_size=(3, 3), stride=(2, 2))
-        # module[0] and module[1] simultaneously
-        #print(self.layer_to_process)
         for idx, module in enumerate(named_children): 
-            #print(module[0], module[1])
             if self.layer_to_process in module[0]:
                 layer_number = idx
                 conv_layer = module
                 _, next_conv_layer = next(named_children)
                 break
 
-
         #iterate through all the parameters of the network
         for layer in self.model.children():
             #hardcode to find the last conv layer
-            #this is not needed for now as long as you set the last batchnorm layer to 0
+            #this is not needed for now as long as you set the 
+            #last batchnorm layer to 0
             #proven empirically on the 3 layer 3*3 network
 
             #if convolutional layer
@@ -482,6 +482,9 @@ class PruningEnv:
                             mask = self.maskbuildweight(indices, size[2], size[0])
                             masktuple = ((mask),)*size[1]
                             finalmask = torch.stack((masktuple),1)
+                            # get prune amount to return to caller
+                            amt_pruned = indices[0,:size[0]].sum()
+                            
                         elif iter_ == layer_number+1:
                             #size[2]&[3] == kernel_size size[1] = prev_num_filters
                             mask = self.maskbuildweight2(indices, size[2], size[3], size[1])
@@ -498,15 +501,15 @@ class PruningEnv:
                     if iterbn == layer_number:
                         size = param.size()
 
-
                         #multiply param.data with a mask of zeros up to 
                         #the desired index, all else are filled with ones
-
                         mask = self.maskbuildbias(indices, size[0])
 
                         # print(param.data)
                         param.data = torch.mul(param.data,mask)
                 iterbn = iterbn + 1
+
+        return amt_pruned
 
     def reset_to_k(self):
         ''' resets CNN to partially trained net w/ full params'''
