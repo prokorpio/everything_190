@@ -23,19 +23,19 @@ for layer_name, _ in env.model.named_modules():
 for episode in range(M):
     print("=====New Episode=====")
     env.reset_to_k() # reset CNN to full-params
-    env._evaluate_model()
-    time.sleep(1.5)
+    #env._evaluate_model()
+    #time.sleep(1.5)
     action_reward_buffer = [] # list of (action,reward) tuples per episode
 
     # single rollout, layer-by-layer CNN scan
     for layer_name in layers_to_prune:
         env.layer_to_process = layer_name
-        time.sleep(1.5)
+        #time.sleep(1.5)
         print("===== Working on", layer_name, "layer =====")
         # get state from orig model (or should we get from pruned model?)
         state = env.get_state()
         action = agent.get_action(state)
-        #logging.info("Actions: {}".format(action))
+        logging.info("Actions: {}".format(action))
         action_to_index = (action > 0.5).type(torch.int)
         #logging.info("action_to_index sum: {}".format(action_to_index.sum()))
         env.prune_layer(action_to_index)

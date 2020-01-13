@@ -40,17 +40,15 @@ class PruningEnv:
         # build chosen model to prune
         self.model_type = model_type
         self.model = self.build_model_to_prune().to(self.device)
-        print("Starting Pre-Training")
-        self._train_model(num_epochs=0)
-        self.init_full_weights = copy.deepcopy(self.model.state_dict()) 
+        #print("Starting Pre-Training")
+        #self._train_model(num_epochs=0)
+        #self.init_full_weights = copy.deepcopy(self.model.state_dict()) 
                                     # initially, model to be pruned has full-params
-                                    # used in reset()
-        self.trained_weights = copy.deepcopy(torch.load(os.getcwd() + \
-                                                    '/best_snapshot_78.pt',
-                                                    map_location=self.device))
-        self.partially_trained = copy.deepcopy(torch.load(os.getcwd() + \
-                                                '/partially_trained_3.pt',
-                                                map_location = self.device))
+                                    # used in reset_to_k()
+        #self.trained_weights = copy.deepcopy(torch.load(os.getcwd() + \
+        #                                            '/best_snapshot_78.pt',
+        #                                            map_location=self.device))
+
         # state
         self.layer_to_process = None # Layer to process, 
                                      # str name is usr-identified 
@@ -123,7 +121,7 @@ class PruningEnv:
         for name, module in self.model.named_modules(): # this model changes
             if self.layer_to_process in name:
                 conv_layer = module
-                logging.info(module)
+                #logging.info(module)
                 break
 
         filter_weights = conv_layer.weight.data.clone() # copy params
@@ -220,7 +218,6 @@ class PruningEnv:
                 correct += (prediction == labels).sum().item() 
 
         val_acc = correct/total
-        print('Validation Accuracy: {:.2f}%'.format(val_acc*100))
         
         return val_acc
                 
@@ -264,17 +261,18 @@ class PruningEnv:
 
         # train for M epochs
         #self._train_model(num_epochs=2)
-        print("Training skipped")
+        logging.info("Training skipped")
 
         # test
         acc = self._evaluate_model() # acc is in {0,1}
+        logging.info('Validation Accuracy: {:.2f}%'.format(acc*100))
 
         # get flops 
         flops = self._estimate_layer_flops()
 
         # get reward as func of acc and flops
         reward = -(1-acc)*np.log(flops)
-        print("Reward:", reward)
+        logging.info("Reward: {}".format(reward))
         return reward
 
     def maskbuildbias(self, indices, num_filters):
@@ -474,25 +472,20 @@ class PruningEnv:
                         param.data = torch.mul(param.data,mask)
                 iterbn = iterbn + 1
 
-    def reset(self):
-        ''' resets CNN to full params'''
-        self.model.load_state_dict(self.init_full_weights)
-
-    def load_trained(self):
-        '''loads a trained model'''
-        ###Alternate way of loading a state dict.
-        ###Dependent on how it was saved.
-        self.model = self.trained_weights
-    
     def reset_to_k(self):
-        '''resets CNN to partially trained model epochs = 3, batchsize = 64'''
-        #better to reload the weights since they are changed upon pruning
-        #it seems
-        self.partially_trained = copy.deepcopy(torch.load(os.getcwd() + \
+        ''' resets CNN to partially trained net w/ full params'''
+        #self.model.load_state_dict(self.init_full_weights)
+
+        self.model = copy.deepcopy(torch.load(os.getcwd() + \
                                                 '/partially_trained_3.pt',
                                                 map_location = self.device))
-        
-        self.model = self.partially_trained
+
+    #def load_trained(self):
+    #    '''loads a trained model'''
+    #    ###Alternate way of loading a state dict.
+    #    ###Dependent on how it was saved.
+    #    self.model = self.trained_weights
+    
         
     #def step(self, action):
         #''' Run one timestep '''

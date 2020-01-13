@@ -62,26 +62,23 @@ class REINFORCE_agent():
         for t in reversed(range(len(episode_rewards))): # t is timestep
             Gt = episode_rewards[t] + self.gamma*Gt     # Return function Gt
             returns[t] = Gt                             # Return per time step     
-        print("Gt =" , returns)
+
         returns = torch.tensor(returns) 
         returns = (returns - returns.mean())/(returns.std() + 1e-9)
                              # standardized to control variance of Return
 
         expanded_returns = torch.zeros(len(returns), self.action_size)
-        print("actions", actions)
         for i, Gt in enumerate(returns):
             # mult Gt only on activated channels
-            # changed from == 1 because the actions tensor is not yet binned
-            expanded_returns[i, np.where(actions[i] >=  0.5)[0]] = \
+            expanded_returns[i, np.where(actions[i] >  0.5)[0]] = \
                                                     Gt.type(torch.float)
 
-        print("exp_ret", expanded_returns)
         # Compute gradients, 
         #logging.info("Expanded returns[0]: {}".format(expanded_returns[0]))
         actions = torch.log(torch.transpose(actions,0,1))
-        logging.info("Actions: {}".format(actions))
+        logging.info("Actions:\n{}".format(actions))
         Jt = expanded_returns.matmul(actions) 
-        logging.info("Jt = {}".format(Jt))
+        #logging.info("Jt:\n{}".format(Jt))
         #Jt = [] # will summands of objective function
         #for log_prob, Gt in zip(log_probs, returns):
         #    Jt.append(-log_prob*Gt) # REINFORCE policy gradient theorem, Q = Gt
@@ -92,6 +89,7 @@ class REINFORCE_agent():
                                                  # to single vector tensor, then sum elements
         objective_func.backward()  # assigns grad attribute to all Variables
         self.policy.Adamizer.step() # gradient ascent step
+
 
         
 
