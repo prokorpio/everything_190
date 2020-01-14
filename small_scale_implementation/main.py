@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 get_log = True
 if get_log:
-    writer = SummaryWriter('runs/experiment_1')
+    print ("Initializing writer")
+    writer = SummaryWriter('runs/experiment_2')
 
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
@@ -32,7 +33,7 @@ for episode in range(M):
     env.reset_to_k() # reset CNN to full-params
     #env._evaluate_model()
     action_reward_buffer = [] # list of (action,reward) tuples per episode
-
+    pruned_prev_layer = 0 # how much was pruned in a previous layer
     # single rollout, layer-by-layer CNN scan
     for xp_num, layer_name in enumerate(layers_to_prune):
         env.layer_to_process = layer_name
@@ -51,7 +52,8 @@ for episode in range(M):
 
         # get reward
         logging.info("Calculating reward")
-        reward,acc,flop,flops_ratio = env._calculate_reward(amount_pruned)
+        reward,acc,flop,flops_ratio = env._calculate_reward(amount_pruned,\
+                                        pruned_prev_layer)
         action_reward_buffer.append((action, reward))
         
         # Log info's
@@ -61,7 +63,8 @@ for episode in range(M):
             writer.add_scalar('Percent_Flops_Remaining_vs_Experience', 
                               flops_ratio, total_xps)
             writer.add_scalar('Reward_vs_Experience', reward, total_xps)
-        
+        pruned_prev_layer = amount_pruned #next layer's previous is this layer
+
     # calc cumulative reward, agent learns 
     logging.info('Agent learning')
     actions, rewards = zip(*action_reward_buffer) # both var are tuple wrapped
@@ -71,3 +74,7 @@ for episode in range(M):
 
 if get_log:
     writer.close()
+    
+###Train the final to compare with the unpruned model
+PATH = os.getcwd() + 'pruned_2.pth'
+torch.save(env.model.state_dict(), PATH)

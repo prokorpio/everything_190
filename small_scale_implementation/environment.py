@@ -254,7 +254,7 @@ class PruningEnv:
         
         return val_acc
                 
-    def _estimate_layer_flops(self, amount_pruned):
+    def _estimate_layer_flops(self, amount_pruned, pruned_prev_layer):
         ''' Helper tool for _calculate_reward(),
             estimate conv layer flops,
             same as in AMC implementation '''
@@ -276,7 +276,7 @@ class PruningEnv:
         pad_w = conv_layer.padding[1]
         stride_h = conv_layer.stride[0]
         stride_w = conv_layer.stride[1]
-        C_in = conv_layer.in_channels
+        C_in = conv_layer.in_channels - pruned_prev_layer
         C_out = conv_layer.out_channels - amount_pruned
         groups = conv_layer.groups
 
@@ -288,7 +288,7 @@ class PruningEnv:
        
         return layer_flops
 
-    def _calculate_reward(self, amount_pruned): 
+    def _calculate_reward(self, amount_pruned, pruned_prev_layer): 
         ''' Performs the ops to get reward 
             of action of current layer'''
 
@@ -301,10 +301,11 @@ class PruningEnv:
         logging.info('Validation Accuracy: {:.2f}%'.format(acc*100))
 
         # get flops 
-        flops_orig = self._estimate_layer_flops(0)
-        flops_remain = self._estimate_layer_flops(amount_pruned)
+        flops_orig = self._estimate_layer_flops(0, pruned_prev_layer)
+        flops_remain = self._estimate_layer_flops(amount_pruned,\
+                                                    pruned_prev_layer)
 
-        flops_ratio = flops_remain / flops_orig
+        flops_ratio = float(float(flops_remain) / float(flops_orig))
         # get reward as func of acc and flops
         #amount_pruned = amount_pruned.type(torch.float)
         #total_filters = torch.tensor(total_filters, dtype = torch.float)
