@@ -301,8 +301,9 @@ class PruningEnv:
         logging.info('Validation Accuracy: {:.2f}%'.format(acc*100))
 
         # get flops 
-        flops_orig = self._estimate_layer_flops(0)
-        flops_remain = self._estimate_layer_flops(amount_pruned, pruned_prev_layer)
+        flops_orig = self._estimate_layer_flops(0, pruned_prev_layer)
+        flops_remain = self._estimate_layer_flops(amount_pruned,\
+                                                    pruned_prev_layer)
 
         flops_ratio = float(float(flops_remain) / float(flops_orig))
         # get reward as func of acc and flops
