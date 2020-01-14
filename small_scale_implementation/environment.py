@@ -343,9 +343,10 @@ class PruningEnv:
         #            finalmask = torch.cat((finalmask, mask1),0)
         #logging.info("B mask size: {}".format(finalmask.size()))
         #logging.info("B mask diff: {}".format((finalmask-bias_mask).sum()))
-        return finalmask
+        #return finalmask
+        return bias_mask
 
-    def maskbuildweight(self, indices, kernelsize, num_filters):
+    def maskbuildweight(self, indices, kernel_size, num_filters):
         '''
             Builds a mask for the weights of the layer to be pruned. 
             Sub function of prune_layer
@@ -353,31 +354,36 @@ class PruningEnv:
             Args:
                 indices = list of indices to be pruned. 
                           i.e. [0,1,1,0,0,1,1,0,1,0...]
-                kernelsize = size of the kernel of the filters, 
+                kernel_size = size of the kernel of the filters, 
                              assumed to be n*n (i.e. square filters)
         '''
-        mask0 = torch.zeros((1,kernelsize, kernelsize))
-        mask1 = torch.ones((1,kernelsize, kernelsize))
-        
-        #Workaround for indices [[]]
-        indices = indices[0]
-        indices = indices[:num_filters]
-        for i, val in enumerate(indices):
-            #initialize the mask
-            if i == 0:
-                if val == 0:
-                    finalmask = mask0
-                else:
-                    finalmask = mask1
-            #concatenate the masks
-            else:
-                if val == 0:
-                    finalmask = torch.cat((finalmask, mask0),0)
-                else:
-                    finalmask = torch.cat((finalmask, mask1),0)
+        weight_mask = copy.copy(indices[0,:num_filters]).view(-1,1,1)
+        weight_mask = weight_mask.expand(-1,kernel_size,kernel_size)
 
-        logging.info("W mask size: {}".format(finalmask.size()))
-        return finalmask
+        #mask0 = torch.zeros((1,kernel_size, kernel_size))
+        #mask1 = torch.ones((1,kernel_size, kernel_size))
+        #
+        ##Workaround for indices [[]]
+        #indices = indices[0]
+        #indices = indices[:num_filters]
+        #for i, val in enumerate(indices):
+        #    #initialize the mask
+        #    if i == 0:
+        #        if val == 0:
+        #            finalmask = mask0
+        #        else:
+        #            finalmask = mask1
+        #    #concatenate the masks
+        #    else:
+        #        if val == 0:
+        #            finalmask = torch.cat((finalmask, mask0),0)
+        #        else:
+        #            finalmask = torch.cat((finalmask, mask1),0)
+
+        #logging.info("W mask size: {}".format(finalmask.size()))
+        #logging.info("W mask diff: {}".format((weight_mask-finalmask).sum()))
+        #return finalmask
+        return weight_mask
     
     def maskbuildweight2(self, prev_indices, kernel1, kernel2, num_filters_prev):
         ''' Builds a mask for the weights of the next layer. 
@@ -388,38 +394,43 @@ class PruningEnv:
                           i.e. [0,1,1,0,0,1,1,0,1,0...]
                 kernel1, kernel2 = n*m kernel size.
         '''
+        next_weight_mask = copy.copy(prev_indices[0,:num_filters_prev])
+        next_weight_mask = next_weight_mask.view(-1,1,1)
+        next_weight_mask = next_weight_mask.expand(-1,kernel1,kernel2)
+
         #you build the mask based on the 
         #previous layer's indices but stack it according to this layer's indices
-        mask0 = torch.zeros((1,kernel1, kernel2))
-        mask1 = torch.ones((1,kernel1, kernel2))
+        #mask0 = torch.zeros((1,kernel1, kernel2))
+        #mask1 = torch.ones((1,kernel1, kernel2))
        
-        #Workaround for indices [[]]
-        prev_indices = prev_indices[0]
-        prev_indices = prev_indices[:num_filters_prev]
+        ##Workaround for indices [[]]
+        #prev_indices = prev_indices[0]
+        #prev_indices = prev_indices[:num_filters_prev]
 
-        #build on a per channel basis
-        for i, val in enumerate(prev_indices):
-            #initialize the mask
-            if i == 0:
-                if val == 0:
-                    finalmask = mask0
-                else:
-                    finalmask = mask1
-            #concatenate the masks
-            else:
-                if val == 0:
-                    finalmask = torch.cat((finalmask, mask0),0)
-                else:
-                    finalmask = torch.cat((finalmask, mask1),0)
+        ##build on a per channel basis
+        #for i, val in enumerate(prev_indices):
+        #    #initialize the mask
+        #    if i == 0:
+        #        if val == 0:
+        #            finalmask = mask0
+        #        else:
+        #            finalmask = mask1
+        #    #concatenate the masks
+        #    else:
+        #        if val == 0:
+        #            finalmask = torch.cat((finalmask, mask0),0)
+        #        else:
+        #            finalmask = torch.cat((finalmask, mask1),0)
 
+        ## stack on a per filter basis
+        ## meaning change torch.stack dimension to 0
+        ## but masktuple is still multiplied by number of filters since it 
+        ## is about hte current layers filters
+        #logging.info("W2 mask size: {}".format(finalmask.size()))
+        #logging.info("W2 mask diff: {}".format((next_weight_mask-finalmask).sum()))
+        #return finalmask
+        return next_weight_mask
 
-        # stack on a per filter basis
-        # meaning change torch.stack dimension to 0
-        # but masktuple is still multiplied by number of filters since it 
-        # is about hte current layers filters
-        logging.info("W2 mask size: {}".format(finalmask.size()))
-        return finalmask
-    
     def prune_layer(self, indices):
         ''' Added filter pruning function 
             Args: 
@@ -472,7 +483,7 @@ class PruningEnv:
 
                             #multiply param.data with a mask of zeros up to the 
                             #desired index, all else are filled with ones
-                            logging.info('Build bias mask')
+                            #logging.info('Build bias mask')
                             mask = self.maskbuildbias(indices, size[0])
                             param.data = torch.mul(param.data,mask)
 
@@ -483,7 +494,7 @@ class PruningEnv:
                         #mask per channel
                         if iter_ == layer_number:
                             #size[2] == kernel size size[0] == num filters
-                            logging.info('Build filter mask')
+                            #logging.info('Build filter mask')
                             mask = self.maskbuildweight(indices, size[2], size[0])
                             masktuple = ((mask),)*size[1]
                             finalmask = torch.stack((masktuple),1)
@@ -492,7 +503,7 @@ class PruningEnv:
                             
                         elif iter_ == layer_number+1:
                             #size[2]&[3] == kernel_size size[1] = prev_num_filters
-                            logging.info('Build next filter mask')
+                            #logging.info('Build next filter mask')
                             mask = self.maskbuildweight2(indices, size[2], size[3], size[1])
                             masktuple = ((mask),)*size[0]
                             finalmask = torch.stack((masktuple),0)
@@ -509,7 +520,7 @@ class PruningEnv:
 
                         #multiply param.data with a mask of zeros up to 
                         #the desired index, all else are filled with ones
-                        logging.info('Build batchnorm mask')
+                        #logging.info('Build batchnorm mask')
                         mask = self.maskbuildbias(indices, size[0])
 
                         # print(param.data)

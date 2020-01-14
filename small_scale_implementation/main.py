@@ -14,14 +14,16 @@ logging.basicConfig(level=logging.INFO,
                             '[%(filename)s:%(lineno)d]' +
                             ' %(message)s'))
 get_log = True
+xp_num = 1
 if get_log:
-    print ("Initializing writer")
-    writer = SummaryWriter('runs/experiment_2')
+    print ("Initializing Experiment", xp_num, "Writer")
+    writer = SummaryWriter(('runs/experiment_' + str(xp_num)))
 
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
 agent = REINFORCE_agent(env.state_size, 512)
 M = 1# no reason, number of training episodes
+
 layers_to_prune = [] # will be list of string names
 for layer_name, _ in env.model.named_modules():
     if "conv" in layer_name:
@@ -75,6 +77,7 @@ for episode in range(M):
 if get_log:
     writer.close()
     
+
 ###Train the final to compare with the unpruned model
-PATH = os.getcwd() + 'pruned_2.pth'
-torch.save(env.model.state_dict(), PATH)
+#PATH = os.getcwd() + 'pruned_2.pth'
+#torch.save(env.model.state_dict(), PATH)
