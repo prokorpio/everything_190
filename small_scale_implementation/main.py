@@ -20,7 +20,7 @@ if get_log:
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
 agent = REINFORCE_agent(env.state_size, 512)
-M = 5# no reason, number of training episodes
+M = 1# no reason, number of training episodes
 layers_to_prune = [] # will be list of string names
 for layer_name, _ in env.model.named_modules():
     if "conv" in layer_name:
@@ -69,4 +69,5 @@ for episode in range(M):
     actions = torch.squeeze(torch.stack(actions)).type(torch.float)
     agent.update_policy(rewards, actions) 
 
-
+if get_log:
+    writer.close()

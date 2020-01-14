@@ -19,10 +19,10 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 class REINFORCE_agent():
-    """ add description"""
+    """ add description """
 
     def __init__(self, state_size, action_size, gamma=0.99, lr=8e-5):
-
+        
         self.state_size= state_size
         self.action_size = action_size
 
@@ -95,8 +95,6 @@ class REINFORCE_agent():
         objective_func.backward()  # assigns grad attribute to all Variables
         self.policy.Adamizer.step() # gradient ascent step
 
-
-        
 
 # =====================USE AGENT=============================
 '''

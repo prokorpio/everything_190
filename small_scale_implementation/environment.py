@@ -323,21 +323,25 @@ class PruningEnv:
                 indices = list of indices to be pruned. 
                           i.e. [0,1,1,0,0,1,1,0,1,0...]
         '''
-        mask0 = torch.zeros(1).to(self.device)
-        mask1 = torch.ones(1).to(self.device)
-        indices = indices[0]
-        indices = indices[:num_filters]
-        for i, val in enumerate(indices):
-            if i == 0:
-                if val == 0:
-                    finalmask = mask0
-                else:
-                    finalmask = mask1
-            else:
-                if val == 0:
-                    finalmask = torch.cat((finalmask, mask0),0)
-                else:
-                    finalmask = torch.cat((finalmask, mask1),0)
+        bias_mask = copy.copy(indices[0, :num_filters])
+
+        #mask0 = torch.zeros(1).to(self.device)
+        #mask1 = torch.ones(1).to(self.device)
+        #indices = indices[0]
+        #indices = indices[:num_filters]
+        #for i, val in enumerate(indices):
+        #    if i == 0:
+        #        if val == 0:
+        #            finalmask = mask0
+        #        else:
+        #            finalmask = mask1
+        #    else:
+        #        if val == 0:
+        #            finalmask = torch.cat((finalmask, mask0),0)
+        #        else:
+        #            finalmask = torch.cat((finalmask, mask1),0)
+        #logging.info("B mask size: {}".format(finalmask.size()))
+        #logging.info("B mask diff: {}".format((finalmask-bias_mask).sum()))
         return finalmask
 
     def maskbuildweight(self, indices, kernelsize, num_filters):
@@ -370,8 +374,8 @@ class PruningEnv:
                     finalmask = torch.cat((finalmask, mask0),0)
                 else:
                     finalmask = torch.cat((finalmask, mask1),0)
-            # print("finalmaskshape", finalmask.shape)
-        # print(finalmask)
+
+        logging.info("W mask size: {}".format(finalmask.size()))
         return finalmask
     
     def maskbuildweight2(self, prev_indices, kernel1, kernel2, num_filters_prev):
@@ -406,14 +410,13 @@ class PruningEnv:
                     finalmask = torch.cat((finalmask, mask0),0)
                 else:
                     finalmask = torch.cat((finalmask, mask1),0)
-            # print("finalmaskshape", finalmask.shape)
 
 
         # stack on a per filter basis
         # meaning change torch.stack dimension to 0
         # but masktuple is still multiplied by number of filters since it 
         # is about hte current layers filters
-
+        logging.info("W2 mask size: {}".format(finalmask.size()))
         return finalmask
     
     def prune_layer(self, indices):
@@ -468,7 +471,7 @@ class PruningEnv:
 
                             #multiply param.data with a mask of zeros up to the 
                             #desired index, all else are filled with ones
-
+                            logging.info('Build bias mask')
                             mask = self.maskbuildbias(indices, size[0])
                             param.data = torch.mul(param.data,mask)
 
@@ -479,6 +482,7 @@ class PruningEnv:
                         #mask per channel
                         if iter_ == layer_number:
                             #size[2] == kernel size size[0] == num filters
+                            logging.info('Build filter mask')
                             mask = self.maskbuildweight(indices, size[2], size[0])
                             masktuple = ((mask),)*size[1]
                             finalmask = torch.stack((masktuple),1)
@@ -487,6 +491,7 @@ class PruningEnv:
                             
                         elif iter_ == layer_number+1:
                             #size[2]&[3] == kernel_size size[1] = prev_num_filters
+                            logging.info('Build next filter mask')
                             mask = self.maskbuildweight2(indices, size[2], size[3], size[1])
                             masktuple = ((mask),)*size[0]
                             finalmask = torch.stack((masktuple),0)
@@ -503,6 +508,7 @@ class PruningEnv:
 
                         #multiply param.data with a mask of zeros up to 
                         #the desired index, all else are filled with ones
+                        logging.info('Build batchnorm mask')
                         mask = self.maskbuildbias(indices, size[0])
 
                         # print(param.data)
