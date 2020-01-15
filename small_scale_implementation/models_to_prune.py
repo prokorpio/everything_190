@@ -1,6 +1,11 @@
 # contains the neural networks to be pruned
 
 # Import libraries
+import logging
+logging.basicConfig(level=logging.INFO,
+                    format=('%(levelname)s:'+
+                            '[%(filename)s:%(lineno)d]' +
+                            ' %(message)s'))
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -52,17 +57,17 @@ class RandBasicCNN(nn.Module):
     
         L1_filters, L2_filters, L3_filters, L4_filters = filter_counts
         # number of filters per layer depends on how much was pruned
-
-        super(BasicCNN, self).__init__()
+        logging.info('Rand-Subnet Filters: {}'.format(filter_counts))
+        super(RandBasicCNN, self).__init__()
         self.conv1 = nn.Conv2d(3, L1_filters,3,stride=2)
         self.conv2 = nn.Conv2d(L1_filters,L2_filters,3)
         self.conv3 = nn.Conv2d(L2_filters,L3_filters,3,stride=2)
         self.conv4 = nn.Conv2d(L3_filters, L4_filters, 3)
         self.dropout = nn.Dropout(p = 0.3)
-        self.bn1 = nn.BatchNorm2d(filters)
-        self.bn2 = nn.BatchNorm2d(filters)
-        self.bn3 = nn.BatchNorm2d(filters)
-        self.bn4 = nn.BatchNorm2d(filters)
+        self.bn1 = nn.BatchNorm2d(L1_filters)
+        self.bn2 = nn.BatchNorm2d(L2_filters)
+        self.bn3 = nn.BatchNorm2d(L3_filters)
+        self.bn4 = nn.BatchNorm2d(L4_filters)
         self.fc1 = nn.Linear(L4_filters*4*4, 10)
         self.linear_in = L4_filters
         self.softmax = nn.Softmax(1)

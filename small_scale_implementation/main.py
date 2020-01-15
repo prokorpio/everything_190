@@ -58,8 +58,8 @@ for episode in range(M):
 
         # perform action
         total_filters, amount_pruned = env.prune_layer(action_to_index)
-        # store number of remaining filters
-        rand_subnet.filter_counts.append(total_filters - amount_pruned)
+        remaining_filters = (total_filters-amount_pruned).item()
+        rand_subnet.filter_counts.append(remaining_filters)
 
         # get reward
         logging.info("Calculating reward")

@@ -37,6 +37,7 @@ class PruningEnv:
         self.train_dl, self.test_dl = self.get_dataloaders()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+        logging.info("Device {}".format(self.device))
         # build chosen model to prune
         self.model_type = model_type
         self.model = self._build_model_to_prune().to(self.device)
@@ -284,8 +285,8 @@ class PruningEnv:
             of action of current layer'''
 
         # train for M epochs
-        self._train_model(num_epochs=1)
-        #logging.info("Training skipped")
+        #self._train_model(num_epochs=1)
+        logging.info("Training skipped")
 
         # test
         acc = self._evaluate_model() # acc is in {0,1}
@@ -335,7 +336,7 @@ class PruningEnv:
         #logging.info("B mask size: {}".format(finalmask.size()))
         #logging.info("B mask diff: {}".format((finalmask-bias_mask).sum()))
         #return finalmask
-        return bias_mask
+        return bias_mask.to(self.device)
 
     def maskbuildweight(self, indices, kernel_size, num_filters):
         '''
@@ -374,7 +375,7 @@ class PruningEnv:
         #logging.info("W mask size: {}".format(finalmask.size()))
         #logging.info("W mask diff: {}".format((weight_mask-finalmask).sum()))
         #return finalmask
-        return weight_mask
+        return weight_mask.to(self.device)
     
     def maskbuildweight2(self, prev_indices, kernel1, kernel2, num_filters_prev):
         ''' Builds a mask for the weights of the next layer. 
@@ -420,7 +421,7 @@ class PruningEnv:
         #logging.info("W2 mask size: {}".format(finalmask.size()))
         #logging.info("W2 mask diff: {}".format((next_weight_mask-finalmask).sum()))
         #return finalmask
-        return next_weight_mask
+        return next_weight_mask.to(self.device)
 
     def prune_layer(self, indices):
         ''' Added filter pruning function 
@@ -501,9 +502,7 @@ class PruningEnv:
                             masktuple = ((mask),)*size[0]
                             finalmask = torch.stack((masktuple),0)
 
-                        #print(param.data.shape, finalmask.shape)
-                        param.data = torch.mul(param.data,
-                                               finalmask.to(self.device))
+                        param.data = torch.mul(param.data,finalmask)
                         # print(param.data,"after")
                 iter_ = iter_ + 1    
             if type(layer) == nn.BatchNorm2d:

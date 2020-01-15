@@ -1,5 +1,12 @@
 ## Contains helper tools 
 import time
+import logging
+logging.basicConfig(level=logging.INFO,
+                    format=('%(levelname)s:'+
+                            '[%(filename)s:%(lineno)d]' +
+                            ' %(message)s'))
+
+import torch
 
 import models_to_prune
 
@@ -21,6 +28,7 @@ class RandSubnet():
         '''
         if self.model_type.lower() == 'basic' :
             self.model = models_to_prune.RandBasicCNN(self.filter_counts)
+            self.model = self.model.to(self.device)
         else:
             print('model not available') #TODO: use proper handling
             return -1
