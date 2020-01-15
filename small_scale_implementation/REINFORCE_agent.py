@@ -2,7 +2,7 @@
 # coding: utf-8
 
 # Import Libraries
-import gym
+#import gym
 import numpy as np
 import torch
 import torch.nn as nn # neural network class, parang Keras
