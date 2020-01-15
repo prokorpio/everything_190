@@ -434,6 +434,7 @@ class PruningEnv:
         iter_ = 0
         iterbn = 0
         amt_pruned = 0 # to be assigned in mask_per_channel condition
+        total_filters = 0 # same as above,filter # before pruning the layer
         
         named_children = self.model.named_children()
         for idx, module in enumerate(named_children): 
@@ -486,11 +487,12 @@ class PruningEnv:
                         if iter_ == layer_number:
                             #size[2] == kernel size size[0] == num filters
                             #logging.info('Build filter mask')
-                            mask = self.maskbuildweight(indices, size[2], size[0])
+                            mask = self.maskbuildweight(indices,size[2],size[0])
                             masktuple = ((mask),)*size[1]
                             finalmask = torch.stack((masktuple),1)
                             # get prune amount to return to caller
                             amt_pruned = indices[0,:size[0]].sum()
+                            total_filters = size[0]
                             
                         elif iter_ == layer_number+1:
                             #size[2]&[3] == kernel_size size[1] = prev_num_filters
@@ -518,7 +520,7 @@ class PruningEnv:
                         param.data = torch.mul(param.data,mask)
                 iterbn = iterbn + 1
 
-        return amt_pruned
+        return total_filters, amt_pruned 
 
     def reset_to_k(self):
         ''' resets CNN to partially trained net w/ full params'''

@@ -4,7 +4,7 @@ import time
 import models_to_prune
 
 
-class Rand_Subnet():
+class RandSubnet():
     '''Handles rand-init equivalent of pruned networks.
     '''
 
@@ -14,11 +14,13 @@ class Rand_Subnet():
         self.model_type = model_type
         self.model = None   
 
-    def build(self, filter_counts): 
+        self.filter_counts = []  # filter count per layer
+
+    def build(self): 
         '''Builds the rand-init-ed subnet. 
         '''
         if self.model_type.lower() == 'basic' :
-            self.model = models_to_prune.RandBasicCNN(filter_counts)
+            self.model = models_to_prune.RandBasicCNN(self.filter_counts)
         else:
             print('model not available') #TODO: use proper handling
             return -1

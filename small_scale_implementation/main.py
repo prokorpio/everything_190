@@ -1,12 +1,15 @@
 # Import libraries
-import torch
 import time
-from environment import PruningEnv
-from REINFORCE_agent import REINFORCE_agent
 import os
 import logging
+
 import numpy as np
+import torch
 from torch.utils.tensorboard import SummaryWriter
+
+from environment import PruningEnv
+from REINFORCE_agent import REINFORCE_agent
+from utilities import RandSubnet
 
 # Logging utils
 logging.basicConfig(level=logging.INFO, 
@@ -29,6 +32,10 @@ for layer_name, _ in env.model.named_modules():
     if "conv" in layer_name:
         layers_to_prune.append(layer_name)
 
+# Define RandSubnet, for benchmarking
+rand_subnet = RandSubnet(env.model_type)
+
+
 # Training Loop
 for episode in range(M):
     print("\n=========== Episode", episode,"============")
@@ -50,7 +57,9 @@ for episode in range(M):
         action_to_index = (action > 0.5).type(torch.int)
 
         # perform action
-        amount_pruned = env.prune_layer(action_to_index)
+        total_filters, amount_pruned = env.prune_layer(action_to_index)
+        # store number of remaining filters
+        rand_subnet.filter_counts.append(total_filters - amount_pruned)
 
         # get reward
         logging.info("Calculating reward")
@@ -66,6 +75,14 @@ for episode in range(M):
                               flops_ratio, total_xps)
             writer.add_scalar('Reward_vs_Experience', reward, total_xps)
         pruned_prev_layer = amount_pruned #next layer's previous is this layer
+    
+    # get equivalent rand-init pruned network
+    logging.info('Building and Evaluating Equiv RandSubnet')
+    rand_subnet.build()
+    rand_acc = rand_subnet.evaluate(env.test_dl)
+    logging.info('Rand Validation Accuracy: {:.2f}%'.format(rand_acc*100))
+    if get_log:
+        writer.add_scalar('RandAccuracy_vs_Episode', rand_acc, episode)
 
     # calc cumulative reward, agent learns 
     logging.info('Agent learning')
