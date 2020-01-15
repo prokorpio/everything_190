@@ -39,15 +39,16 @@ class PruningEnv:
 
         # build chosen model to prune
         self.model_type = model_type
-        self.model = self.build_model_to_prune().to(self.device)
+        self.model = self._build_model_to_prune().to(self.device)
         #print("Starting Pre-Training")
         #self._train_model(num_epochs=0)
         #self.init_full_weights = copy.deepcopy(self.model.state_dict()) 
                                     # initially, model to be pruned has full-params
                                     # used in reset_to_k()
-        #self.trained_weights = copy.deepcopy(torch.load(os.getcwd() + \
-        #                                            '/best_snapshot_78.pt',
-        #                                            map_location=self.device))
+
+        # set training parameters
+        self.loss_func = nn.CrossEntropyLoss()
+        self.optimizer = optim.Adam(self.model.parameters(0.0008))
 
         # state
         self.layer_to_process = None # Layer to process, 
@@ -59,11 +60,6 @@ class PruningEnv:
         #autoenc.load_state_dict(pretrained_autoenc_dict)
         #autoenc.eval() # dont store grads
         #self.state_encoder = autoenc.encoder
-
-        # per episode
-        #self.expis = 5    # num of experience before backprop for agent       
-        #self.xp_count = 0 # count xp for now, stopping is controlled 
-                          # by the reward value not changing any more
 
     def get_dataloaders(self):
         ''' imports the chosen dataset '''
@@ -102,7 +98,7 @@ class PruningEnv:
         print('dataset not available') 
         return -1
 
-    def build_model_to_prune(self): 
+    def _build_model_to_prune(self): 
         ''' Builds the model to compress '''
 
         if self.model_type.lower() == 'basic' :
@@ -185,11 +181,8 @@ class PruningEnv:
         ''' Helper tool for _calculate_reward(),
             trains the model being pruned '''
         
-        loss_func = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(self.model.parameters(0.0008))
-        
         self.model.train()
-        print('Training CNN model')
+        logging.info('Training CNN model')
         for epoch in range(num_epochs):
             train_acc = []
             start_time = time.time()
@@ -197,26 +190,24 @@ class PruningEnv:
                 inputs, labels = train_data
                 inputs = inputs.to(self.device)
                 labels = labels.to(self.device)
-                # TODO: transfer to device?
                 
-                optimizer.zero_grad()
-                print("weight",self.model.conv1.weight.grad)
+                self.optimizer.zero_grad()
+
                 # forward
                 preds = self.model(inputs) # forward pass
-                loss = loss_func(preds,labels) # compute loss
+                loss = self.loss_func(preds,labels) # compute loss
                 
                 # backward
                 loss.backward()  # compute grads
-               
                 
-                optimizer.step() # update params w/ Adam update rule
+                self.optimizer.step() # update params w/ Adam update rule
 
                 # print accuracy
                 _, prediction = torch.max(preds, dim=1) # idx w/ max val is
                                                         # most confident class
                 train_acc.append((prediction==labels).type(torch.double).mean())
 
-                if (idx+1) % 10 == 0:
+                if (idx+1) % 2 == 0:
                     elapsed_time = time.time() - start_time
                     str_time = time.strftime("%H:%M:%S", 
                                              time.gmtime(elapsed_time))
@@ -226,7 +217,7 @@ class PruningEnv:
                                    # len(self.train_dl), 
                                    # loss.item(), train_acc[-1], 
                                    # str_time))
-        print('Training Done')
+        logging.info('Training Done')
 
     def _evaluate_model(self):
         ''' Helper tool for _calculate_reward(),
@@ -293,8 +284,8 @@ class PruningEnv:
             of action of current layer'''
 
         # train for M epochs
-        #self._train_model(num_epochs=2)
-        logging.info("Training skipped")
+        self._train_model(num_epochs=1)
+        #logging.info("Training skipped")
 
         # test
         acc = self._evaluate_model() # acc is in {0,1}

@@ -45,6 +45,48 @@ class BasicCNN(nn.Module):
 
         return x
 
+class RandBasicCNN(nn.Module):
+    '''Rand-init equiv of BasicCNN
+    '''
+    def __init__(self,filter_counts):
+    
+        L1_filters, L2_filters, L3_filters, L4_filters = filter_counts
+        # number of filters per layer depends on how much was pruned
+
+        super(BasicCNN, self).__init__()
+        self.conv1 = nn.Conv2d(3, L1_filters,3,stride=2)
+        self.conv2 = nn.Conv2d(L1_filters,L2_filters,3)
+        self.conv3 = nn.Conv2d(L2_filters,L3_filters,3,stride=2)
+        self.conv4 = nn.Conv2d(L3_filters, L4_filters, 3)
+        self.dropout = nn.Dropout(p = 0.3)
+        self.bn1 = nn.BatchNorm2d(filters)
+        self.bn2 = nn.BatchNorm2d(filters)
+        self.bn3 = nn.BatchNorm2d(filters)
+        self.bn4 = nn.BatchNorm2d(filters)
+        self.fc1 = nn.Linear(L4_filters*4*4, 10)
+        self.linear_in = L4_filters
+        self.softmax = nn.Softmax(1)
+
+    def forward(self, x):
+        #x = x.to(device)
+        x = F.relu(self.conv1(x))
+        x = self.dropout(x)
+        x = self.bn1(x)
+        x = F.relu(self.conv2(x))
+        x = self.dropout(x)
+        x = self.bn2(x)
+        x = F.relu(self.conv3(x))
+        x = self.dropout(x)
+        x = self.bn3(x)
+        x = F.relu(self.conv4(x))
+        x = self.dropout(x)
+        x = self.bn4(x)
+        x = x.view(-1,self.linear_in*4*4)
+        x = (self.fc1(x))#Dense
+        x = self.softmax(x)
+
+        return x
+
 class TestCNN(nn.Module):
     def __init__(self):
     
