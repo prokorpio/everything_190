@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO,
                             '[%(filename)s:%(lineno)d]' +
                             ' %(message)s'))
 get_log = True
-xp_num = 1
+xp_num = 2
 if get_log:
     print ("Initializing Experiment", xp_num, "Writer")
     writer = SummaryWriter(('runs/experiment_' + str(xp_num)))
@@ -25,7 +25,7 @@ if get_log:
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
 agent = REINFORCE_agent(env.state_size, 512)
-M = 1# no reason, number of training episodes
+M = 50# no reason, number of training episodes
 
 layers_to_prune = [] # will be list of string names
 for layer_name, _ in env.model.named_modules():
@@ -82,7 +82,7 @@ for episode in range(M):
     rand_acc = rand_subnet.evaluate(env.test_dl)
     logging.info('Rand Validation Accuracy: {:.2f}%'.format(rand_acc*100))
     if get_log:
-        writer.add_scalar('RandAccuracy_vs_Episode', rand_acc, episode)
+        writer.add_scalar('RandAccuracy_vs_Episode', rand_acc, total_xps)
 
     # calc cumulative reward, agent learns 
     logging.info('Agent learning')
