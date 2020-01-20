@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO,
                             '[%(filename)s:%(lineno)d]' +
                             ' %(message)s'))
 get_log = True
-xp_num = 2
+xp_num = 10
 if get_log:
     print ("Initializing Experiment", xp_num, "Writer")
     writer = SummaryWriter(('runs/experiment_' + str(xp_num)))
@@ -33,7 +33,7 @@ for layer_name, _ in env.model.named_modules():
         layers_to_prune.append(layer_name)
 
 # Define RandSubnet, for benchmarking
-rand_subnet = RandSubnet(env.model_type)
+#rand_subnet = RandSubnet(env.model_type)
 
 
 # Training Loop
@@ -59,7 +59,7 @@ for episode in range(M):
         # perform action
         total_filters, amount_pruned = env.prune_layer(action_to_index)
         remaining_filters = (total_filters-amount_pruned).item()
-        rand_subnet.filter_counts.append(remaining_filters)
+        #rand_subnet.filter_counts.append(remaining_filters)
 
         # get reward
         logging.info("Calculating reward")
@@ -77,12 +77,12 @@ for episode in range(M):
         pruned_prev_layer = amount_pruned #next layer's previous is this layer
     
     # get equivalent rand-init pruned network
-    logging.info('Building and Evaluating Equiv RandSubnet')
-    rand_subnet.build()
-    rand_acc = rand_subnet.evaluate(env.test_dl)
-    logging.info('Rand Validation Accuracy: {:.2f}%'.format(rand_acc*100))
-    if get_log:
-        writer.add_scalar('RandAccuracy_vs_Episode', rand_acc, total_xps)
+    # logging.info('Building and Evaluating Equiv RandSubnet')
+    # rand_subnet.build()
+    # rand_acc = rand_subnet.evaluate(env.test_dl)
+    # logging.info('Rand Validation Accuracy: {:.2f}%'.format(rand_acc*100))
+    # if get_log:
+        # writer.add_scalar('RandAccuracy_vs_Episode', rand_acc, total_xps)
 
     # calc cumulative reward, agent learns 
     logging.info('Agent learning')

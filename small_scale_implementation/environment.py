@@ -317,7 +317,7 @@ class PruningEnv:
                           i.e. [0,1,1,0,0,1,1,0,1,0...]
         '''
         bias_mask = copy.copy(indices[0, :num_filters])
-
+        bias_mask = bias_mask.type(torch.FloatTensor)
         #mask0 = torch.zeros(1).to(self.device)
         #mask1 = torch.ones(1).to(self.device)
         #indices = indices[0]
@@ -338,7 +338,7 @@ class PruningEnv:
         #return finalmask
         return bias_mask.to(self.device)
 
-    def maskbuildweight(self, indices, kernel_size, num_filters):
+    def maskbuildweight(self, indices, kernel1, kernel2, num_filters):
         '''
             Builds a mask for the weights of the layer to be pruned. 
             Sub function of prune_layer
@@ -350,8 +350,8 @@ class PruningEnv:
                              assumed to be n*n (i.e. square filters)
         '''
         weight_mask = copy.copy(indices[0,:num_filters]).view(-1,1,1)
-        weight_mask = weight_mask.expand(-1,kernel_size,kernel_size)
-
+        weight_mask = weight_mask.expand(-1,kernel1,kernel2)
+        weight_mask = weight_mask.type(torch.FloatTensor)
         #mask0 = torch.zeros((1,kernel_size, kernel_size))
         #mask1 = torch.ones((1,kernel_size, kernel_size))
         #
@@ -389,6 +389,7 @@ class PruningEnv:
         next_weight_mask = copy.copy(prev_indices[0,:num_filters_prev])
         next_weight_mask = next_weight_mask.view(-1,1,1)
         next_weight_mask = next_weight_mask.expand(-1,kernel1,kernel2)
+        next_weight_mask = next_weight_mask.type(torch.FloatTensor)
 
         #you build the mask based on the 
         #previous layer's indices but stack it according to this layer's indices
@@ -488,7 +489,8 @@ class PruningEnv:
                         if iter_ == layer_number:
                             #size[2] == kernel size size[0] == num filters
                             #logging.info('Build filter mask')
-                            mask = self.maskbuildweight(indices,size[2],size[0])
+                            mask = self.maskbuildweight(indices,size[2],\
+                                                            size[3],size[0])
                             masktuple = ((mask),)*size[1]
                             finalmask = torch.stack((masktuple),1)
                             # get prune amount to return to caller
@@ -498,7 +500,8 @@ class PruningEnv:
                         elif iter_ == layer_number+1:
                             #size[2]&[3] == kernel_size size[1] = prev_num_filters
                             #logging.info('Build next filter mask')
-                            mask = self.maskbuildweight2(indices, size[2], size[3], size[1])
+                            mask = self.maskbuildweight2(indices, size[2],\
+                                                            size[3], size[1])
                             masktuple = ((mask),)*size[0]
                             finalmask = torch.stack((masktuple),0)
 
@@ -529,11 +532,13 @@ class PruningEnv:
                                                 '/partially_trained_3.pt',
                                                 map_location = self.device))
 
-    #def load_trained(self):
-    #    '''loads a trained model'''
-    #    ###Alternate way of loading a state dict.
-    #    ###Dependent on how it was saved.
-    #    self.model = self.trained_weights
+    def load_trained(self):
+       '''loads a trained model'''
+       ###Alternate way of loading a state dict.
+       ###Dependent on how it was saved.
+       self.model = copy.deepcopy(torch.load(os.getcwd() + \
+                                                '/best_snapshot_78.pt',
+                                                map_location = self.device))
     
         
     #def step(self, action):
