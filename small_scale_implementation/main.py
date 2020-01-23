@@ -16,15 +16,15 @@ logging.basicConfig(level=logging.INFO,
                     format=('%(levelname)s:' +
                             '[%(filename)s:%(lineno)d]' +
                             ' %(message)s'))
-get_log = True
-xp_num = 10
+get_log = True 
+xp_num = 1
 if get_log:
     print ("Initializing Experiment", xp_num, "Writer")
     writer = SummaryWriter(('runs/experiment_' + str(xp_num)))
 
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
-agent = REINFORCE_agent(env.state_size, 512)
+agent = REINFORCE_agent(env.state_size, action_size=512)
 M = 50# no reason, number of training episodes
 
 layers_to_prune = [] # will be list of string names
@@ -33,16 +33,20 @@ for layer_name, _ in env.model.named_modules():
         layers_to_prune.append(layer_name)
 
 # Define RandSubnet, for benchmarking
-#rand_subnet = RandSubnet(env.model_type)
+rand_compare = False 
+if rand_compare:
+    rand_subnet = RandSubnet(env.model_type)
 
 
 # Training Loop
 for episode in range(M):
     print("\n=========== Episode", episode,"============")
     env.reset_to_k() # reset CNN to full-params
+    #TODO: include condition to calc layer info ^^ 
     #env._evaluate_model()
     action_reward_buffer = [] # list of (action,reward) tuples per episode
     pruned_prev_layer = 0 # how much was pruned in a previous layer
+
     # single rollout, layer-by-layer CNN scan
     for xp_num, layer_name in enumerate(layers_to_prune):
         env.layer_to_process = layer_name
@@ -56,15 +60,15 @@ for episode in range(M):
         action = torch.unsqueeze(action, 0)
         action_to_index = (action > 0.5).type(torch.int)
 
-        # perform action
+        # perform action 
         total_filters, amount_pruned = env.prune_layer(action_to_index)
-        remaining_filters = (total_filters-amount_pruned).item()
-        #rand_subnet.filter_counts.append(remaining_filters)
+        if rand_compare:
+            remaining_filters = (total_filters-amount_pruned).item()
+            rand_subnet.filter_counts.append(remaining_filters)
 
         # get reward
         logging.info("Calculating reward")
-        reward,acc,flop,flops_ratio = env._calculate_reward(amount_pruned,\
-                                        pruned_prev_layer)
+        reward,acc,flop,flops_ratio = env._calculate_reward()
         action_reward_buffer.append((action, reward))
         
         # Log info's
@@ -77,15 +81,17 @@ for episode in range(M):
         pruned_prev_layer = amount_pruned #next layer's previous is this layer
     
     # get equivalent rand-init pruned network
-    # logging.info('Building and Evaluating Equiv RandSubnet')
-    # rand_subnet.build()
-    # rand_acc = rand_subnet.evaluate(env.test_dl)
-    # logging.info('Rand Validation Accuracy: {:.2f}%'.format(rand_acc*100))
-    # if get_log:
-        # writer.add_scalar('RandAccuracy_vs_Episode', rand_acc, total_xps)
+    if rand_compare:
+        logging.info('Building and Evaluating Equiv RandSubnet')
+        rand_subnet.build()
+        # may train subnet here for n epochs
+        rand_acc = rand_subnet.evaluate(env.test_dl)
+        logging.info('Rand Validation Accuracy: {:.2f}%'.format(rand_acc*100))
+        if get_log:
+            writer.add_scalar('RandAccuracy_vs_Episode', rand_acc, total_xps)
 
     # calc cumulative reward, agent learns 
-    logging.info('Agent learning')
+    logging.info('RL Agent learning')
     actions, rewards = zip(*action_reward_buffer) # both var are tuple wrapped
     # actions: tuple->tensor
     actions = torch.squeeze(torch.stack(actions)).type(torch.float)

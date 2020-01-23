@@ -104,4 +104,47 @@ class RandSubnet():
         
         return val_acc
 
+
+#def estimate_layer_flops(self, layer, 
+#                               input_x, # input feat map
+#                               amount_pruned=0, # amt pruned on current layer 
+#                               pruned_prev_layer=0): # amt pruned on prev layer
+#    ''' Estimate conv layer flops.
+#        Implementation derived from AMC'''
+#
+#    # count multiply-add as 1 flop
+#    multipy_add = 1
+#
+#    # get layer type
+#    layer_str = str(layer)
+#    type_name = layer_str[:layer_str.find('(')].strip() # strip off whitespaces
+#
+#    # estimate Conv flops
+#    if type_name in 'Conv2d':
+#        input_h = input_x.size()[2]
+#        input_w = input_x.size()[3]
+#        kernel_h = conv_layer.kernel_size[0]
+#        kernel_w = conv_layer.kernel_size[1]
+#        pad_h = conv_layer.padding[0]
+#        pad_w = conv_layer.padding[1]
+#        stride_h = conv_layer.stride[0]
+#        stride_w = conv_layer.stride[1]
+#        C_in = conv_layer.in_channels - pruned_prev_layer
+#        C_out = conv_layer.out_channels - amount_pruned
+#        groups = conv_layer.groups
+#
+#        out_h = (input_h + 2*pad_h - kernel_h)/stride_h + 1  # also filtr steps
+#        out_w = (input_w + 2*pad_w - kernel_w)/stride_w + 1  
+#        
+#        # define new attribute in layer
+#        layer.flops = C_out * (C_in/groups) * kernel_h*kernel_w \
+#                            * out_h * out_w * multiply_add
+#      
+#    # estimate Linear flops
+#    elif type_name in 'Linear':
+#        pass
+#
+#    return 
+
+
         

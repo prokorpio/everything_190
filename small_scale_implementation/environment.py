@@ -11,7 +11,8 @@ import torchvision.datasets as ds
 import torch.utils.data as data
 
 import models_to_prune 
-from temp_files.state_rep_autoencoder import autoencoder
+#from temp_files.state_rep_autoencoder import autoencoder
+#from utilities import estimate_layer_flops
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -30,7 +31,7 @@ class PruningEnv:
 
     def __init__(self, dataset='cifar10', 
                  model_type='basic',
-                 state_size = 1024):
+                 state_size = 513):
 
         # assign dataset
         self.dataset = dataset
@@ -41,20 +42,25 @@ class PruningEnv:
         # build chosen model to prune
         self.model_type = model_type
         self.model = self._build_model_to_prune().to(self.device)
-        #print("Starting Pre-Training")
-        #self._train_model(num_epochs=0)
-        #self.init_full_weights = copy.deepcopy(self.model.state_dict()) 
-                                    # initially, model to be pruned has full-params
-                                    # used in reset_to_k()
 
+        #logging.info("Starting Pre-Training")
         # set training parameters
         self.loss_func = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(0.0008))
+        #self._train_model(num_epochs=1)
+        #self.init_full_weights = copy.deepcopy(self.model.state_dict()) 
+                                    # initially, self.model has full-params
+                                    # used in reset_to_k()
 
         # state
         self.layer_to_process = None # Layer to process, 
-                                     # str name is usr-identified 
+                                     # str name, is usr-identified 
+        self.amount_pruned = 0  # On layer_to_process, updated in prune_layer()
+        self.prev_amount_pruned = 0 # previous layer's amt pruned
+        self.prev_out_feat = [0,0]  # List of [h,w] of prev layer's featmap 
+
         self.state_size = state_size 
+        self.max_layer_idx = 4 #TODO: can be derived from self.model
         #autoenc = autoencoder(self.state_size)
         #pretrained_autoenc_dict = torch.load('conv_autoencoder.pth',
         #                                     map_location=self.device)
@@ -110,7 +116,9 @@ class PruningEnv:
             print('model not available') #TODO: use proper handling
             return -1
 
-    def get_state(self): 
+    def get_state(self, include_grads=False,
+                        include_flops=True): 
+                
         ''' Gets the layer/state '''
         
         # get conv layer 
@@ -118,65 +126,68 @@ class PruningEnv:
         for name, module in self.model.named_modules(): # this model changes
             if self.layer_to_process in name:
                 conv_layer = module
-                #logging.info(module)
+                layer_idx = int(name[-1]) # to be used in state_rep
                 break
 
+        # State element 1
+        layer_idx = torch.tensor([layer_idx/self.max_layer_idx]) # (0,1]
+        #logging.info('layer_index: {}'.format(layer_idx))
+
+        # State element 2
         filter_weights = conv_layer.weight.data.clone() # copy params
         #TODO: what about the bias tensor ?
-        pooled_filter = torch.squeeze(F.avg_pool2d(filter_weights,
+        pooled_weights = torch.squeeze(F.avg_pool2d(filter_weights,
                                                    filter_weights.size()[-1]))
-        pooled_filter = pooled_filter*1000 # scale up magnitudes for encoder
-        padded_state_rep = torch.zeros([1,512,16,16]) # largest pooled filter
+        pooled_weights = pooled_weights*1000 # scale up magnitudes for encoder
+        #padded_state_rep = torch.zeros([1,512,16,16]) # largest pooled filter
                                                       # size is [512,256].
                                                       # think of 1 as batchsize
-        state_rep = pooled_filter.mean(axis = 1)
-        #print(state_rep.shape,"SHAPE")
-        state_rep_padded = torch.zeros([512])
-        state_rep_padded[0:state_rep.shape[0]] = state_rep.cpu()
+        pooled_weights_mean = pooled_weights.mean(axis = 1)
+        padded_weights = torch.zeros([512])
+        padded_weights[0:pooled_weights_mean.shape[0]] = pooled_weights_mean
+        padded_weights -= padded_weights.min()
+        padded_weights /= padded_weights.max() # squish to [0,1]
 
+        # Concat two core elements
+        state_rep = torch.cat((layer_idx,padded_weights),0)
+                    # addn'ls to be concat thru ff conditions
 
+        # State element 3
+        if include_grads: 
+            loss_func = nn.CrossEntropyLoss()
+            optimizer = optim.Adam(self.model.parameters(0.0008))
 
-        loss_func = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(self.model.parameters(0.0008))
-        
+            #Fake train. To obtain gradients
+            for idx, train_data in enumerate(self.train_dl):
+                    inputs, labels = train_data
+                    inputs = inputs.to(self.device)
+                    labels = labels.to(self.device)
+                    # TODO: transfer to device?
+                    
+                    optimizer.zero_grad()
 
-        #Fake train. To obtain gradients
-        for idx, train_data in enumerate(self.train_dl):
-                inputs, labels = train_data
-                inputs = inputs.to(self.device)
-                labels = labels.to(self.device)
-                # TODO: transfer to device?
-                
-                optimizer.zero_grad()
-                # forward
-                preds = self.model(inputs) # forward pass
-                loss = loss_func(preds,labels) # compute loss
-                
-                # backward
-                loss.backward()  # compute grads
-                for key, var in self.model.named_parameters():
+                    # forward
+                    preds = self.model(inputs) # forward pass
+                    loss = loss_func(preds,labels) # compute loss
 
-                    if key == self.layer_to_process + '.weight':
-                        pooled_grad = torch.squeeze(F.avg_pool2d(var.grad,
-                                                           var.grad.size()[-1]))
-                        pooled_grad = pooled_grad*1000
-                        grad_rep = pooled_grad.mean(axis = 1)
+                    # backward
+                    loss.backward()  # compute grads
+                    for key, var in self.model.named_parameters():
+                        if key == self.layer_to_process + '.weight':
+                            pooled_grad = torch.squeeze(F.avg_pool2d(var.grad,
+                                                        var.grad.size()[-1]))
+                            pooled_grad = pooled_grad*1000
+                            grad_rep = pooled_grad.mean(axis = 1)
+                            break
+                    break
 
-                        break
-                break
-        
-        grad_rep_padded = torch.zeros([512])
-        grad_rep_padded[0:grad_rep.shape[0]] = grad_rep
-        state_rep_final = torch.cat((state_rep_padded,grad_rep_padded),0)
+            grad_rep_padded = torch.zeros([512])
+            grad_rep_padded[0:grad_rep.shape[0]] = grad_rep
+            state_rep = torch.cat((state_rep,grad_rep_padded),0)
 
+        #if include_flops:
 
-
-        #temp for a verying state
-        
-
-
-        # return processed state
-        return state_rep_final
+        return state_rep
 
     def _train_model(self, num_epochs=10): 
         ''' Helper tool for _calculate_reward(),
@@ -246,41 +257,50 @@ class PruningEnv:
         
         return val_acc
                 
-    def _estimate_layer_flops(self, amount_pruned, pruned_prev_layer):
+    def _estimate_layer_flops(self):
         ''' Helper tool for _calculate_reward(),
-            estimate conv layer flops,
-            same as in AMC implementation '''
+            estimate conv layer flops'''
 
         for name, module in self.model.named_modules():
             if self.layer_to_process in name:
-                #conv_layer_name = name
                 conv_layer = module
+                #logging.info('conv name: {}'.format(name))
                 break
 
-        for inputs, _ in self.train_dl:
-            break # just to get input size
+        if '1' in name: # first conv layer
+            for inputs, _ in self.train_dl:
+                self.prev_out_feat = inputs.size()[2:] # input is data
+                self.prev_amount_pruned = 0 # no prev layer was pruned
+                break 
 
-        input_h = inputs.size()[2]
-        input_w = inputs.size()[3]
+        input_h = self.prev_out_feat[0]
+        input_w = self.prev_out_feat[1]
         kernel_h = conv_layer.kernel_size[0]
         kernel_w = conv_layer.kernel_size[1]
         pad_h = conv_layer.padding[0]
         pad_w = conv_layer.padding[1]
         stride_h = conv_layer.stride[0]
         stride_w = conv_layer.stride[1]
-        C_in = conv_layer.in_channels - pruned_prev_layer
-        C_out = conv_layer.out_channels - amount_pruned
+        C_in = conv_layer.in_channels - self.prev_amount_pruned
+        C_out = conv_layer.out_channels 
         groups = conv_layer.groups
 
-        filter_steps_h = (input_h + 2*pad_h - kernel_h)/stride_h + 1  
-        filter_steps_w = (input_w + 2*pad_w - kernel_w)/stride_w + 1  
+        out_h = (input_h + 2*pad_h - kernel_h)//stride_h + 1  
+        out_w = (input_w + 2*pad_w - kernel_w)//stride_w + 1  
+        self.prev_out_feat = [out_h, out_w]
 
-        layer_flops = C_out * (C_in/groups) * kernel_h*kernel_w \
-                            * filter_steps_h * filter_steps_w
-       
-        return layer_flops
+        original_layer_flops = C_out * (C_in/groups) * kernel_h*kernel_w \
+                            * out_h * out_w
+        pruned_layer_flops = (C_out - self.amount_pruned) * (C_in/groups) \
+                            * kernel_h*kernel_w * out_h * out_w
 
-    def _calculate_reward(self, amount_pruned, pruned_prev_layer): 
+        #logging.info('{} flops: \n from {} to {}'.format(name,
+        #                                                 original_layer_flops,
+        #                                                 pruned_layer_flops))
+
+        return original_layer_flops, pruned_layer_flops
+
+    def _calculate_reward(self): 
         ''' Performs the ops to get reward 
             of action of current layer'''
 
@@ -293,9 +313,7 @@ class PruningEnv:
         logging.info('Validation Accuracy: {:.2f}%'.format(acc*100))
 
         # get flops 
-        flops_orig = self._estimate_layer_flops(0, pruned_prev_layer)
-        flops_remain = self._estimate_layer_flops(amount_pruned,\
-                                                    pruned_prev_layer)
+        flops_orig, flops_remain = self._estimate_layer_flops()
 
         flops_ratio = float(float(flops_remain) / float(flops_orig))
         # get reward as func of acc and flops
@@ -427,10 +445,8 @@ class PruningEnv:
     def prune_layer(self, indices):
         ''' Added filter pruning function 
             Args: 
-                layer_number = the layer to be pruned starts from 0 to 4 
                 indices = tensor of indices to be pruned 
                           i.e. [0,0,0,0,1,1,1,0,1,1,1,0...]
-                self.model = network to be pruned 
         '''
 
         iter_ = 0
@@ -494,8 +510,12 @@ class PruningEnv:
                             masktuple = ((mask),)*size[1]
                             finalmask = torch.stack((masktuple),1)
                             # get prune amount to return to caller
-                            amt_pruned = indices[0,:size[0]].sum()
+                            amt_pruned = size[0] - indices[0,:size[0]].sum()
                             total_filters = size[0]
+
+                            # update env pruning record
+                            self.prev_amount_pruned = self.amount_pruned
+                            self.amount_pruned = amt_pruned
                             
                         elif iter_ == layer_number+1:
                             #size[2]&[3] == kernel_size size[1] = prev_num_filters
@@ -531,6 +551,7 @@ class PruningEnv:
         self.model = copy.deepcopy(torch.load(os.getcwd() + \
                                                 '/partially_trained_3.pt',
                                                 map_location = self.device))
+        #_calculate_layer_infos()
 
     def load_trained(self):
        '''loads a trained model'''
