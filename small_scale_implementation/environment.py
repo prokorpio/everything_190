@@ -9,6 +9,7 @@ import torch
 import torchvision.transforms as tf
 import torchvision.datasets as ds
 import torch.utils.data as data
+from collections import OrderedDict
 
 import models_to_prune 
 #from temp_files.state_rep_autoencoder import autoencoder
@@ -31,7 +32,7 @@ class PruningEnv:
 
     def __init__(self, dataset='cifar10', 
                  model_type='basic',
-                 state_size = 513):
+                 state_size = 516):
 
         # assign dataset
         self.dataset = dataset
@@ -39,6 +40,7 @@ class PruningEnv:
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         logging.info("Device {}".format(self.device))
+
         # build chosen model to prune
         self.model_type = model_type
         self.model = self._build_model_to_prune().to(self.device)
@@ -53,20 +55,20 @@ class PruningEnv:
                                     # used in reset_to_k()
 
         # state
-        self.layer_to_process = None # Layer to process, 
+        self.layers_to_prune = [name for name,_ in self.model.named_modules() 
+                                if 'conv' in name]
+        logging.info(self.layers_to_prune)
+        self.layer = None # Layer to process, 
                                      # str name, is usr-identified 
-        self.amount_pruned = 0  # On layer_to_process, updated in prune_layer()
-        self.prev_amount_pruned = 0 # previous layer's amt pruned
+        self.layer_prune_amounts = OrderedDict()
+        self.layer_flops = OrderedDict()
+        #self.amount_pruned_dict = {} # {layer_name : amount it was pruned}
+        #self.amount_pruned = 0  # On layer_to_process, updated in prune_layer()
+        #self.prev_amount_pruned = 0 # previous layer's amt pruned
         self.prev_out_feat = [0,0]  # List of [h,w] of prev layer's featmap 
 
         self.state_size = state_size 
         self.max_layer_idx = 4 #TODO: can be derived from self.model
-        #autoenc = autoencoder(self.state_size)
-        #pretrained_autoenc_dict = torch.load('conv_autoencoder.pth',
-        #                                     map_location=self.device)
-        #autoenc.load_state_dict(pretrained_autoenc_dict)
-        #autoenc.eval() # dont store grads
-        #self.state_encoder = autoenc.encoder
 
     def get_dataloaders(self):
         ''' imports the chosen dataset '''
@@ -115,16 +117,77 @@ class PruningEnv:
         else:
             print('model not available') #TODO: use proper handling
             return -1
+    
+    def _estimate_layer_flops(self):
+        ''' Helper tool for calculate_network_flops
+            and _calculate_reward(),
+            estimates single conv layer flops
+
+            Important: Assumes calculation is always done in order,
+                        from first to last conv layer'''
+
+        for name, module in self.model.named_modules():
+            if self.layer in name:
+                conv_layer = module
+                #logging.info('conv name: {}'.format(name))
+                break
+
+        if '1' in self.layer: # first conv layer
+            for inputs, _ in self.train_dl:
+                self.prev_out_feat = inputs.size()[2:] # input is data
+                prev_amount_pruned = 0 # no prev layer was pruned
+                break 
+        else: # get previous
+            idx = list(self.layer_prune_amounts.keys()).index(self.layer) - 1 
+            prev_amount_pruned = list(self.layer_prune_amounts.values())[idx]
+
+        amount_pruned = self.layer_prune_amounts[self.layer]
+
+        input_h = self.prev_out_feat[0]
+        input_w = self.prev_out_feat[1]
+        kernel_h = conv_layer.kernel_size[0]
+        kernel_w = conv_layer.kernel_size[1]
+        pad_h = conv_layer.padding[0]
+        pad_w = conv_layer.padding[1]
+        stride_h = conv_layer.stride[0]
+        stride_w = conv_layer.stride[1]
+        C_in = conv_layer.in_channels - prev_amount_pruned
+        C_out = conv_layer.out_channels 
+        groups = conv_layer.groups
+
+        out_h = (input_h + 2*pad_h - kernel_h)//stride_h + 1  
+        out_w = (input_w + 2*pad_w - kernel_w)//stride_w + 1  
+
+        # ff assumes that flops estimation is always done in order
+        self.prev_out_feat = [out_h, out_w]
+
+        original_layer_flops = C_out * (C_in/groups) * kernel_h*kernel_w \
+                            * out_h * out_w
+        pruned_layer_flops = (C_out - amount_pruned) * (C_in/groups) \
+                            * kernel_h*kernel_w * out_h * out_w
+
+        return original_layer_flops, pruned_layer_flops
+
+    def _calculate_network_flops(self):
+        ''' Helper function for get_state '''
+        
+        #total_network_flops = sum(layer_flops.values())
+        layer_idx = list(self.layer_flops.keys()).index(self.layer)
+        #logging.info('layer_idx: {}'.format(layer_idx))
+        reduced_layer_flops = sum(list(self.layer_flops.values())[:layer_idx])
+        current_layer_flops = self.layer_flops[self.layer]
+        rest_layer_flops = sum(list(self.layer_flops.values())[layer_idx+1:])
+
+        return reduced_layer_flops, current_layer_flops, rest_layer_flops
 
     def get_state(self, include_grads=False,
                         include_flops=True): 
-                
         ''' Gets the layer/state '''
         
         # get conv layer 
         # may keep an external pth file for original model
         for name, module in self.model.named_modules(): # this model changes
-            if self.layer_to_process in name:
+            if self.layer in name:
                 conv_layer = module
                 layer_idx = int(name[-1]) # to be used in state_rep
                 break
@@ -173,7 +236,7 @@ class PruningEnv:
                     # backward
                     loss.backward()  # compute grads
                     for key, var in self.model.named_parameters():
-                        if key == self.layer_to_process + '.weight':
+                        if key == self.layer + '.weight':
                             pooled_grad = torch.squeeze(F.avg_pool2d(var.grad,
                                                         var.grad.size()[-1]))
                             pooled_grad = pooled_grad*1000
@@ -185,7 +248,18 @@ class PruningEnv:
             grad_rep_padded[0:grad_rep.shape[0]] = grad_rep
             state_rep = torch.cat((state_rep,grad_rep_padded),0)
 
-        #if include_flops:
+        # State element 4
+        if include_flops:
+            reduced, current, rest = self._calculate_network_flops()
+            total_flops = reduced + current + rest
+            reduced = torch.tensor([reduced/total_flops])
+            current = torch.tensor([current/total_flops])
+            rest = torch.tensor([rest/total_flops])
+            #logging.info('red {} cur {} res {}'.format(reduced, 
+            #                            current,rest))
+            
+            state_rep = torch.cat((state_rep,reduced,current,rest),0)
+
 
         return state_rep
 
@@ -257,49 +331,6 @@ class PruningEnv:
         
         return val_acc
                 
-    def _estimate_layer_flops(self):
-        ''' Helper tool for _calculate_reward(),
-            estimate conv layer flops'''
-
-        for name, module in self.model.named_modules():
-            if self.layer_to_process in name:
-                conv_layer = module
-                #logging.info('conv name: {}'.format(name))
-                break
-
-        if '1' in name: # first conv layer
-            for inputs, _ in self.train_dl:
-                self.prev_out_feat = inputs.size()[2:] # input is data
-                self.prev_amount_pruned = 0 # no prev layer was pruned
-                break 
-
-        input_h = self.prev_out_feat[0]
-        input_w = self.prev_out_feat[1]
-        kernel_h = conv_layer.kernel_size[0]
-        kernel_w = conv_layer.kernel_size[1]
-        pad_h = conv_layer.padding[0]
-        pad_w = conv_layer.padding[1]
-        stride_h = conv_layer.stride[0]
-        stride_w = conv_layer.stride[1]
-        C_in = conv_layer.in_channels - self.prev_amount_pruned
-        C_out = conv_layer.out_channels 
-        groups = conv_layer.groups
-
-        out_h = (input_h + 2*pad_h - kernel_h)//stride_h + 1  
-        out_w = (input_w + 2*pad_w - kernel_w)//stride_w + 1  
-        self.prev_out_feat = [out_h, out_w]
-
-        original_layer_flops = C_out * (C_in/groups) * kernel_h*kernel_w \
-                            * out_h * out_w
-        pruned_layer_flops = (C_out - self.amount_pruned) * (C_in/groups) \
-                            * kernel_h*kernel_w * out_h * out_w
-
-        #logging.info('{} flops: \n from {} to {}'.format(name,
-        #                                                 original_layer_flops,
-        #                                                 pruned_layer_flops))
-
-        return original_layer_flops, pruned_layer_flops
-
     def _calculate_reward(self): 
         ''' Performs the ops to get reward 
             of action of current layer'''
@@ -456,7 +487,7 @@ class PruningEnv:
         
         named_children = self.model.named_children()
         for idx, module in enumerate(named_children): 
-            if self.layer_to_process in module[0]:
+            if self.layer in module[0]:
                 layer_number = idx
                 conv_layer = module
                 _, next_conv_layer = next(named_children)
@@ -510,12 +541,13 @@ class PruningEnv:
                             masktuple = ((mask),)*size[1]
                             finalmask = torch.stack((masktuple),1)
                             # get prune amount to return to caller
-                            amt_pruned = size[0] - indices[0,:size[0]].sum()
+                            amt_pruned = (size[0] -
+                                          indices[0,:size[0]].sum()).item()
                             total_filters = size[0]
 
                             # update env pruning record
-                            self.prev_amount_pruned = self.amount_pruned
-                            self.amount_pruned = amt_pruned
+                            #self.prev_amount_pruned = self.amount_pruned
+                            self.layer_prune_amounts[self.layer] = amt_pruned
                             
                         elif iter_ == layer_number+1:
                             #size[2]&[3] == kernel_size size[1] = prev_num_filters
@@ -551,7 +583,22 @@ class PruningEnv:
         self.model = copy.deepcopy(torch.load(os.getcwd() + \
                                                 '/partially_trained_3.pt',
                                                 map_location = self.device))
-        #_calculate_layer_infos()
+        # initialize starting layer to process
+        self.layer = self.layers_to_prune[0]
+        # initialize prune amounts to zer
+        self.layer_prune_amounts = OrderedDict(zip(self.layers_to_prune,\
+                                                [0]*len(self.layers_to_prune)))
+        logging.info(self.layer_prune_amounts.items())
+        
+        # get layer_flops dict 
+        layer_to_process = self.layer # preserve
+        for name in self.layers_to_prune:
+                self.layer = name
+                orig_flops, flops_remain = self._estimate_layer_flops() 
+                                #TODO: might be better to explicitly pass layer
+                                # name to estimate_flops()
+                self.layer_flops[self.layer] = flops_remain
+        self.layer = layer_to_process
 
     def load_trained(self):
        '''loads a trained model'''

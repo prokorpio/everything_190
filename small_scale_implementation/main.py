@@ -27,10 +27,10 @@ env = PruningEnv()
 agent = REINFORCE_agent(env.state_size, action_size=512)
 M = 50# no reason, number of training episodes
 
-layers_to_prune = [] # will be list of string names
-for layer_name, _ in env.model.named_modules():
-    if "conv" in layer_name:
-        layers_to_prune.append(layer_name)
+#layers_to_prune = [] # will be list of string names
+#for layer_name, _ in env.model.named_modules():
+#    if "conv" in layer_name:
+#        layers_to_prune.append(layer_name)
 
 # Define RandSubnet, for benchmarking
 rand_compare = False 
@@ -45,11 +45,12 @@ for episode in range(M):
     #TODO: include condition to calc layer info ^^ 
     #env._evaluate_model()
     action_reward_buffer = [] # list of (action,reward) tuples per episode
-    pruned_prev_layer = 0 # how much was pruned in a previous layer
+    #pruned_prev_layer = 0 # how much was pruned in a previous layer
 
     # single rollout, layer-by-layer CNN scan
-    for xp_num, layer_name in enumerate(layers_to_prune):
-        env.layer_to_process = layer_name
+    for xp_num, layer_name in enumerate(env.layers_to_prune):
+    #for xp_num, layer_name in enumerate(layers_to_prune):
+        env.layer = layer_name
         print("\n===== Working on", layer_name, "layer =====")
 
         # get state from orig model (or should we get from pruned model?)
@@ -73,12 +74,14 @@ for episode in range(M):
         
         # Log info's
         if get_log:
-            total_xps = episode*len(layers_to_prune) + xp_num
+            max_layer_num = len(env.layer_prune_amounts.keys())
+            total_xps = episode*max_layer_num + xp_num
+            #total_xps = episode*len(layers_to_prune) + xp_num
             writer.add_scalar('Accuracy_vs_Experience', acc, total_xps)
             writer.add_scalar('Percent_Flops_Remaining_vs_Experience', 
                               flops_ratio, total_xps)
             writer.add_scalar('Reward_vs_Experience', reward, total_xps)
-        pruned_prev_layer = amount_pruned #next layer's previous is this layer
+        #pruned_prev_layer = amount_pruned #next layer's previous is this layer
     
     # get equivalent rand-init pruned network
     if rand_compare:
