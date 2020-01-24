@@ -27,11 +27,6 @@ env = PruningEnv()
 agent = REINFORCE_agent(env.state_size, action_size=512)
 M = 50# no reason, number of training episodes
 
-#layers_to_prune = [] # will be list of string names
-#for layer_name, _ in env.model.named_modules():
-#    if "conv" in layer_name:
-#        layers_to_prune.append(layer_name)
-
 # Define RandSubnet, for benchmarking
 rand_compare = False 
 if rand_compare:
@@ -55,7 +50,10 @@ for episode in range(M):
 
         # get state from orig model (or should we get from pruned model?)
         state = env.get_state()
-        
+        #logging.info('state: {}'.format(state[-3:]))
+        logging.info('Sum %flops: {}'.format(sum(state[-3:]))) 
+                                        #network remaining %flops
+
         # get action
         action = agent.get_action(state)
         action = torch.unsqueeze(action, 0)

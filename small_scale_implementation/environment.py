@@ -62,6 +62,7 @@ class PruningEnv:
                                      # str name, is usr-identified 
         self.layer_prune_amounts = OrderedDict()
         self.layer_flops = OrderedDict()
+        self.full_model_flops = 0 # will be calculated in reset_to_k()
         #self.amount_pruned_dict = {} # {layer_name : amount it was pruned}
         #self.amount_pruned = 0  # On layer_to_process, updated in prune_layer()
         #self.prev_amount_pruned = 0 # previous layer's amt pruned
@@ -251,10 +252,10 @@ class PruningEnv:
         # State element 4
         if include_flops:
             reduced, current, rest = self._calculate_network_flops()
-            total_flops = reduced + current + rest
-            reduced = torch.tensor([reduced/total_flops])
-            current = torch.tensor([current/total_flops])
-            rest = torch.tensor([rest/total_flops])
+            # normalized wrt original full flops
+            reduced = torch.tensor([reduced/self.full_model_flops])
+            current = torch.tensor([current/self.full_model_flops])
+            rest = torch.tensor([rest/self.full_model_flops])
             #logging.info('red {} cur {} res {}'.format(reduced, 
             #                            current,rest))
             
@@ -345,6 +346,7 @@ class PruningEnv:
 
         # get flops 
         flops_orig, flops_remain = self._estimate_layer_flops()
+        self.layer_flops[self.layer] = flops_remain
 
         flops_ratio = float(float(flops_remain) / float(flops_orig))
         # get reward as func of acc and flops
@@ -352,7 +354,7 @@ class PruningEnv:
         #total_filters = torch.tensor(total_filters, dtype = torch.float)
         #reward = -(1-acc)*(flops_ratio) 
         reward = -(1-acc)*np.log(flops_remain)#*(total_filters/amount_pruned)#np.log(flops)
-        logging.info("%Flops: {}".format(flops_ratio))
+        logging.info("%Layer Flops: {}".format(flops_ratio))
         logging.info("Reward: {}".format(reward))
 
         return reward, acc, flops_orig, flops_ratio
@@ -588,8 +590,6 @@ class PruningEnv:
         # initialize prune amounts to zer
         self.layer_prune_amounts = OrderedDict(zip(self.layers_to_prune,\
                                                 [0]*len(self.layers_to_prune)))
-        logging.info(self.layer_prune_amounts.items())
-        
         # get layer_flops dict 
         layer_to_process = self.layer # preserve
         for name in self.layers_to_prune:
@@ -599,7 +599,9 @@ class PruningEnv:
                                 # name to estimate_flops()
                 self.layer_flops[self.layer] = flops_remain
         self.layer = layer_to_process
-
+        # save total network flops
+        self.full_model_flops = sum(self.layer_flops.values())
+        
     def load_trained(self):
        '''loads a trained model'''
        ###Alternate way of loading a state dict.
