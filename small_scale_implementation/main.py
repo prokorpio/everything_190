@@ -16,8 +16,9 @@ logging.basicConfig(level=logging.INFO,
                     format=('%(levelname)s:' +
                             '[%(filename)s:%(lineno)d]' +
                             ' %(message)s'))
+
 get_log = True 
-xp_num = 1
+xp_num = 2
 if get_log:
     print ("Initializing Experiment", xp_num, "Writer")
     writer = SummaryWriter(('runs/experiment_' + str(xp_num)))
@@ -32,7 +33,7 @@ rand_compare = False
 if rand_compare:
     rand_subnet = RandSubnet(env.model_type)
 
-
+start_time = time.time()
 # Training Loop
 for episode in range(M):
     print("\n=========== Episode", episode,"============")
@@ -41,6 +42,8 @@ for episode in range(M):
     #env._evaluate_model()
     action_reward_buffer = [] # list of (action,reward) tuples per episode
     #pruned_prev_layer = 0 # how much was pruned in a previous layer
+    flops_ratio_accumulated = 0
+    total_reward = 0
 
     # single rollout, layer-by-layer CNN scan
     for xp_num, layer_name in enumerate(env.layers_to_prune):
@@ -72,13 +75,16 @@ for episode in range(M):
         
         # Log info's
         if get_log:
-            max_layer_num = len(env.layer_prune_amounts.keys())
-            total_xps = episode*max_layer_num + xp_num
-            #total_xps = episode*len(layers_to_prune) + xp_num
-            writer.add_scalar('Accuracy_vs_Experience', acc, total_xps)
-            writer.add_scalar('Percent_Flops_Remaining_vs_Experience', 
-                              flops_ratio, total_xps)
-            writer.add_scalar('Reward_vs_Experience', reward, total_xps)
+            flops_ratio_accumulated += flops_ratio #remaining per layer
+            total_reward += reward 
+            if (xp_num == 3):
+                total_flops_ratio = flops_ratio_accumulated/4
+                #total_xps = episode*len(layers_to_prune) + xp_num
+                writer.add_scalar('Accuracy_vs_Episode', acc, episode)
+                writer.add_scalar('Pruned_Flops_Ratio_vs_Episode', 
+                                  total_flops_ratio, episode)
+                writer.add_scalar('Reward_vs_Episode', 
+                                  total_reward, episode)
         #pruned_prev_layer = amount_pruned #next layer's previous is this layer
     
     # get equivalent rand-init pruned network
@@ -100,6 +106,9 @@ for episode in range(M):
 
 if get_log:
     writer.close()
+    elapsed_time = time.time() - start_time
+    logging.info("Total elapsed time: {}".format( 
+                 time.strftime("%H:%M:%S", time.gmtime(elapsed_time))))
     
 
 ###Train the final to compare with the unpruned model

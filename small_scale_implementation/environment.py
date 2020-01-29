@@ -198,7 +198,8 @@ class PruningEnv:
         #logging.info('layer_index: {}'.format(layer_idx))
 
         # State element 2
-        filter_weights = conv_layer.weight.data.clone() # copy params
+        # copy params
+        filter_weights = torch.abs(conv_layer.weight.data.clone())
         #TODO: what about the bias tensor ?
         pooled_weights = torch.squeeze(F.avg_pool2d(filter_weights,
                                                    filter_weights.size()[-1]))
