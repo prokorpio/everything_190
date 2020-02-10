@@ -359,7 +359,29 @@ class PruningEnv:
         logging.info("Reward: {}".format(reward))
 
         return reward, acc, flops_orig, flops_ratio
-
+    
+    def param_to_mask(self, ratio, method):
+        if method == 'weight_norm':
+            for name, module in self.model.named_modules(): # this model changes
+                if self.layer in name:
+                    conv_layer = module
+                    layer_idx = int(name[-1]) # to be used in state_rep
+                    break
+            filter_weights = torch.abs(conv_layer.weight.data.clone())
+            num_filters = filter_weights.shape[0]
+            pooled_weights = torch.squeeze(F.avg_pool2d(filter_weights,
+                                                       filter_weights.size()[-1]))
+            # print(pooled_weights.shape)        
+            pooled_weights_mean = pooled_weights.mean(axis = 1)
+            # print("Pooled weights\n",pooled_weights_mean)
+            mask = torch.ones(pooled_weights_mean.shape[0])
+            mag_rank = torch.topk(pooled_weights_mean,int(num_filters*ratio),largest = False)
+            mask[mag_rank[1]] = 0
+            padded_weights = torch.zeros([512])
+            # print(mask)
+        else:
+            print("No mask")
+        return mask
     def maskbuildbias(self, indices, num_filters):
         ''' Builds a mask for the bias of the layer to be pruned. 
             Sub function of prune_layer.
@@ -604,13 +626,28 @@ class PruningEnv:
         self.full_model_flops = sum(self.layer_flops.values())
         
     def load_trained(self):
-       '''loads a trained model'''
-       ###Alternate way of loading a state dict.
-       ###Dependent on how it was saved.
-       self.model = copy.deepcopy(torch.load(os.getcwd() + \
+        '''loads a trained model'''
+        ###Alternate way of loading a state dict.
+        ###Dependent on how it was saved.
+        self.model = copy.deepcopy(torch.load(os.getcwd() + \
                                                 '/best_snapshot_78.pt',
                                                 map_location = self.device))
-    
+        # initialize starting layer to process
+        self.layer = self.layers_to_prune[0]
+        # initialize prune amounts to zer
+        self.layer_prune_amounts = OrderedDict(zip(self.layers_to_prune,\
+                                                [0]*len(self.layers_to_prune)))
+        # get layer_flops dict 
+        layer_to_process = self.layer # preserve
+        for name in self.layers_to_prune:
+                self.layer = name
+                orig_flops, flops_remain = self._estimate_layer_flops() 
+                                #TODO: might be better to explicitly pass layer
+                                # name to estimate_flops()
+                self.layer_flops[self.layer] = flops_remain
+        self.layer = layer_to_process
+        # save total network flops
+        self.full_model_flops = sum(self.layer_flops.values())
         
     #def step(self, action):
         #''' Run one timestep '''

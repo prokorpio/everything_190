@@ -18,15 +18,15 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num = 2
+xp_num_ = 100
 if get_log:
-    print ("Initializing Experiment", xp_num, "Writer")
-    writer = SummaryWriter(('runs/experiment_' + str(xp_num)))
+    print ("Initializing Experiment", xp_num_, "Writer")
+    writer = SummaryWriter(('runs/experiment_feb8_' + str(xp_num_)))
 
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
 agent = REINFORCE_agent(env.state_size, action_size=512)
-M = 50# no reason, number of training episodes
+M = 200# no reason, number of training episodes
 
 # Define RandSubnet, for benchmarking
 rand_compare = False 
@@ -43,6 +43,7 @@ for episode in range(M):
     action_reward_buffer = [] # list of (action,reward) tuples per episode
     #pruned_prev_layer = 0 # how much was pruned in a previous layer
     flops_ratio_accumulated = 0
+    amount_pruned_accum = 0
     total_reward = 0
 
     # single rollout, layer-by-layer CNN scan
@@ -77,12 +78,15 @@ for episode in range(M):
         if get_log:
             flops_ratio_accumulated += flops_ratio #remaining per layer
             total_reward += reward 
+            amount_pruned_accum += amount_pruned
             if (xp_num == 3):
                 total_flops_ratio = flops_ratio_accumulated/4
                 #total_xps = episode*len(layers_to_prune) + xp_num
                 writer.add_scalar('Accuracy_vs_Episode', acc, episode)
                 writer.add_scalar('Pruned_Flops_Ratio_vs_Episode', 
                                   total_flops_ratio, episode)
+                writer.add_scalar('Amount_Pruned_vs_Episode',
+                                  amount_pruned_accum, episode)
                 writer.add_scalar('Reward_vs_Episode', 
                                   total_reward, episode)
         #pruned_prev_layer = amount_pruned #next layer's previous is this layer
@@ -111,6 +115,6 @@ if get_log:
                  time.strftime("%H:%M:%S", time.gmtime(elapsed_time))))
     
 
-###Train the final to compare with the unpruned model
-#PATH = os.getcwd() + 'pruned_2.pth'
-#torch.save(env.model.state_dict(), PATH)
+##Train the final to compare with the unpruned model
+PATH = os.getcwd() + '/pruned_feb8_' + str(xp_num_) + '.pth'
+torch.save(env.model.state_dict(), PATH)

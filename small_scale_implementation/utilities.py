@@ -7,6 +7,9 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 from collections import deque
 
 import models_to_prune
@@ -16,14 +19,14 @@ class RandSubnet():
     '''Handles rand-init equivalent of pruned networks.
     '''
 
-    def __init__(self, model_type='basic', layer_count=4):
+    def __init__(self,filter_counts, model_type='basic', layer_count=4):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() \
                                             else 'cpu')
         self.model_type = model_type
         self.model = None   
 
         # filter count per layer
-        self.filter_counts = deque([], maxlen=layer_count)  
+        self.filter_counts = filter_counts
         # assumes all values will be replaced before calling build
 
     def build(self): 
