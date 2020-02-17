@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from collections import deque
+from collections import OrderedDict
 
 import models_to_prune
 
@@ -18,7 +18,6 @@ import models_to_prune
 class RandSubnet():
     '''Handles rand-init equivalent of pruned networks.
     '''
-
     def __init__(self,filter_counts, model_type='basic', layer_count=4):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() \
                                             else 'cpu')
@@ -107,47 +106,162 @@ class RandSubnet():
         
         return val_acc
 
+def extract_feature_map_sizes(model, input_data_shape, device = None):
+    ''' Hook to get conv and fc layerwise feat map sizes
 
-#def estimate_layer_flops(self, layer, 
-#                               input_x, # input feat map
-#                               amount_pruned=0, # amt pruned on current layer 
-#                               pruned_prev_layer=0): # amt pruned on prev layer
-#    ''' Estimate conv layer flops.
-#        Implementation derived from AMC'''
-#
-#    # count multiply-add as 1 flop
-#    multipy_add = 1
-#
-#    # get layer type
-#    layer_str = str(layer)
-#    type_name = layer_str[:layer_str.find('(')].strip() # strip off whitespaces
-#
-#    # estimate Conv flops
-#    if type_name in 'Conv2d':
-#        input_h = input_x.size()[2]
-#        input_w = input_x.size()[3]
-#        kernel_h = conv_layer.kernel_size[0]
-#        kernel_w = conv_layer.kernel_size[1]
-#        pad_h = conv_layer.padding[0]
-#        pad_w = conv_layer.padding[1]
-#        stride_h = conv_layer.stride[0]
-#        stride_w = conv_layer.stride[1]
-#        C_in = conv_layer.in_channels - pruned_prev_layer
-#        C_out = conv_layer.out_channels - amount_pruned
-#        groups = conv_layer.groups
-#
-#        out_h = (input_h + 2*pad_h - kernel_h)/stride_h + 1  # also filtr steps
-#        out_w = (input_w + 2*pad_w - kernel_w)/stride_w + 1  
-#        
-#        # define new attribute in layer
-#        layer.flops = C_out * (C_in/groups) * kernel_h*kernel_w \
-#                            * out_h * out_w * multiply_add
-#      
-#    # estimate Linear flops
-#    elif type_name in 'Linear':
-#        pass
-#
-#    return 
-
-
+        Input:
+            `model`: model which we want to get layerwise feature map size.
+            `input_data_shape`: (list) [C, H, W].
         
+        Output:
+            `fmap_sizes_dict`: (dict) {layer_name : [feat_size]}
+
+        Source:
+            denru01/netadapt/functions.py
+    '''
+    fmap_sizes_dict = {}
+    hooks = []
+    if device == None:
+        device = torch.device('cuda:0' if torch.cuda.is_available() \
+                                             else 'cpu')
+    model = model.to(device)
+    model.eval() # set to evaluation mode, disable dropout etc  
+
+    def _register_hook(submodule):
+       # wrapper for hook registration to perform conditions
+       
+       def _hook(submodule, input, output):
+           type_str = submodule.__class__.__name__
+           if type_str in ['Conv2d','Linear']: # Linear is just conv w/
+                                               # kernel = 1x1     
+               module_id = id(submodule) # unique num for the python object
+               in_fmap_size = list(input[0].size()) # [B,C,H,W], 1st tuplet
+               out_fmap_size = list(output.size()) #[B,C,H,W]
+               fmap_sizes_dict[module_id] = {'in_fmap_size':in_fmap_size,
+                                             'out_fmap_size':out_fmap_size}
+
+       if (not isinstance(submodule,torch.nn.Sequential) \
+                and not isinstance(submodule, torch.nn.ModuleList) \
+                and not (submodule == model)):
+            # attach hook to submodule & append handle for removal later
+            hooks.append(submodule.register_forward_hook(_hook))
+
+    model.apply(_register_hook) # recursively apply fn to all children submods
+    _ = model(torch.randn([1,*input_data_shape]).to(device)) # execute hooks
+
+    for hook in hooks:
+        hook.remove()   # remove submodule hooks using handle
+
+    return fmap_sizes_dict
+
+def get_network_def_from_model(model, input_data_shape):
+    ''' Input: 
+            `model`: model we want to get network_def from
+            `input_data_shape`: (list) [C, H, W].
+        
+        Output:
+            `network_def`: (OrderedDict)
+                           keys(): layer name (e.g. model.0.1, feature.2 ...)
+                           values(): dict of layer properties 
+
+        Source:
+            denru01/netadapt/functions.py
+    '''
+    network_def = OrderedDict()
+    #state_dict_keys = list(model.state_dict().keys()) # ordered layer_names
+                                       # of each learnable layer params
+    fmap_sizes_dict = extract_feature_map_sizes(model, input_data_shape)
+
+    #for layer_param_name in state_dict_keys:
+    for layer_name, layer_module in model.named_modules():
+        layer_id = id(layer_module) # for fmap_sizes_dict access
+        layer_type_str = layer_module.__class__.__name__
+
+        # only process linear or conv for now (others include BN, ConvTran)
+        if layer_type_str in ['Linear']:
+            # Populate info
+            network_def[layer_name] = {
+                'num_in_channels': layer_module.in_features,
+                'num_out_channels': layer_module.out_features,
+                'kernel_size': (1,1),
+                'stride': (1,1),
+                'padding': (0,0),
+                'groups': 1,
+                'in_fmap_size':[1,
+                                fmap_sizes_dict[layer_id]['in_fmap_size'][1],
+                                1, 
+                                1],
+                'out_fmap_size':[1,
+                                 fmap_sizes_dict[layer_id]['out_fmap_size'][1],
+                                 1,
+                                 1],
+                # each linear element is considered as a channel
+                # linear size = [1, in_features]
+            }
+
+        if layer_type_str in ['Conv2d']:
+            # Populate info
+            network_def[layer_name] = {
+                'num_in_channels': layer_module.in_channels,
+                'num_out_channels': layer_module.out_channels,
+                'kernel_size': layer_module.kernel_size,
+                'stride': layer_module.stride,
+                'padding': layer_module.padding,
+                'groups': layer_module.groups,
+                'in_fmap_size': fmap_sizes_dict[layer_id]['in_fmap_size'],
+                'out_fmap_size': fmap_sizes_dict[layer_id]['out_fmap_size'],
+            }
+
+    return network_def
+
+def compute_weights_and_flops(network_def):
+    ''' Get number of flops and weights of entire network 
+
+        Input: 
+            `network_def`: defined in get_network_def_from_model()
+        
+        Output:
+            `layer_weights_dict`: (OrderedDict) records layerwise num of weights.
+            `total_num_weights`: (int) total num of weights. 
+            `layer_flops_dict`: (OrderedDict) recordes layerwise num of FLOPs.
+            `total_num_flops`: (int) total num of FLOPs.     
+    '''
+        
+    total_num_weights, total_num_flops = 0, 0
+
+    # Init dict to store num resources for each layer.
+    layer_weights_dict = OrderedDict()
+    layer_flops_dict = OrderedDict()
+
+    # Iterate over conv layers in network def.
+    for layer_name in network_def.keys():
+        # Take product of filter size dimensions to get num weights for layer.
+        layer_num_weights = (network_def[layer_name]['num_out_channels'] / \
+                             network_def[layer_name]['groups']) * \
+                            network_def[layer_name]['num_in_channels'] * \
+                            network_def[layer_name]['kernel_size'][0] * \
+                            network_def[layer_name]['kernel_size'][1]
+
+        # Store num weights in layer dict and add to total.
+        layer_weights_dict[layer_name] = layer_num_weights
+        total_num_weights += layer_num_weights
+        
+        # Determine num flops for layer using output size.
+        output_size = network_def[layer_name]['out_fmap_size']
+        output_height, output_width = output_size[2], output_size[3]
+        layer_num_flops = layer_num_weights * output_width * output_height
+
+        # Store num macs in layer dict and add to total.
+        layer_flops_dict[layer_name] = layer_num_flops
+        total_num_flops += layer_num_flops
+
+    return layer_weights_dict, total_num_weights, layer_flops_dict, total_num_flops
+
+if __name__ == '__main__':
+    device = torch.device('cuda:0' if torch.cuda.is_available() \
+                          else 'cpu')
+    model = models_to_prune.BasicCNN().to(device)
+    print(compute_weights_and_flops(get_network_def_from_model(model,[3,32,32])))
+
+
+
