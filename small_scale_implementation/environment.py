@@ -48,7 +48,7 @@ class PruningEnv:
         #logging.info("Starting Pre-Training")
         # set training parameters
         self.loss_func = nn.CrossEntropyLoss()
-        self.optimizer = optim.Adam(self.model.parameters(0.0008))
+        self.optimizer = optim.Adam(self.model.parameters(), lr = 0.0008)
         #self._train_model(num_epochs=1)
         #self.init_full_weights = copy.deepcopy(self.model.state_dict()) 
                                     # initially, self.model has full-params
@@ -86,7 +86,7 @@ class PruningEnv:
                                transform = cifar10_trans)
 
             train_loader = data.DataLoader(train,
-                                           batch_size = 32,
+                                           batch_size = 64,
                                            shuffle = True,
                                            num_workers = 0)
             
@@ -264,7 +264,37 @@ class PruningEnv:
 
 
         return state_rep
+    def get_grads(self):
+        loss_func = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(self.model.parameters(0.0008))
 
+        #Fake train. To obtain gradients
+        for idx, train_data in enumerate(self.train_dl):
+                inputs, labels = train_data
+                inputs = inputs.to(self.device)
+                labels = labels.to(self.device)
+                # TODO: transfer to device?
+                
+                optimizer.zero_grad()
+
+                # forward
+                preds = self.model(inputs) # forward pass
+                loss = loss_func(preds,labels) # compute loss
+
+                # backward
+                loss.backward()  # compute grads
+                for key, var in self.model.named_parameters():
+                    if key == self.layer + '.weight':
+                        pooled_grad = torch.squeeze(F.avg_pool2d(var.grad,
+                                                    var.grad.size()[-1]))
+                        grad_rep = pooled_grad.mean(axis = 1)
+                        break
+                break
+
+        # grad_rep_padded = torch.zeros([512])
+        # grad_rep_padded[0:grad_rep.shape[0]] = grad_rep
+        # state_rep = torch.cat((state_rep,grad_rep_padded),0)
+        return grad_rep
     def _train_model(self, num_epochs=10): 
         ''' Helper tool for _calculate_reward(),
             trains the model being pruned '''
@@ -379,6 +409,58 @@ class PruningEnv:
             mask[mag_rank[1]] = 0
             padded_weights = torch.zeros([512])
             # print(mask)
+        if method == 'weight_norm_and_var':
+            for name, module in self.model.named_modules(): # this model changes
+                if self.layer in name:
+                    conv_layer = module
+                    layer_idx = int(name[-1]) # to be used in state_rep
+                    break
+            filter_weights = torch.abs(conv_layer.weight.data.clone())
+            num_filters = filter_weights.shape[0]
+            pooled_weights = torch.squeeze(F.avg_pool2d(filter_weights,
+                                                       filter_weights.size()[-1]))
+            # print(pooled_weights.shape)        
+            pooled_weights_mean = pooled_weights.mean(axis = 1)
+            # print("Pooled weights\n",pooled_weights_mean)
+            mask = torch.ones(pooled_weights_mean.shape[0])
+            mag_rank = torch.topk(pooled_weights_mean,int(num_filters*ratio),largest = False)
+            
+            #Variance across the channels/kernels?, and not the individual kernel elements
+            pooled_weights_var = torch.var(pooled_weights, dim = 1)
+            
+            mask[mag_rank[1]] = 0
+            padded_weights = torch.zeros([512])
+        if method == 'grad_norm':
+            loss_func = nn.CrossEntropyLoss()
+            optimizer = optim.Adam(self.model.parameters(0.0008))
+
+            #Fake train. To obtain gradients
+            for idx, train_data in enumerate(self.train_dl):
+                    inputs, labels = train_data
+                    inputs = inputs.to(self.device)
+                    labels = labels.to(self.device)
+                    # TODO: transfer to device?
+                    
+                    optimizer.zero_grad()
+
+                    # forward
+                    preds = self.model(inputs) # forward pass
+                    loss = loss_func(preds,labels) # compute loss
+
+                    # backward
+                    loss.backward()  # compute grads
+                    for key, var in self.model.named_parameters():
+                        if key == self.layer + '.weight':
+                            pooled_grad = torch.squeeze(F.avg_pool2d(torch.abs(var.grad),
+                                                        var.grad.size()[-1]))
+                            grad_rep = pooled_grad.mean(axis = 1)
+                            num_filters = grad_rep.shape[0]
+                            print("NUM", num_filters)
+                            break
+                    break
+            mask = torch.ones(grad_rep.shape[0])
+            grad_rank = torch.topk(grad_rep, int(num_filters*ratio), largest = False)
+            mask[grad_rank[1]] = 0
         else:
             print("No mask")
         return mask
@@ -392,24 +474,7 @@ class PruningEnv:
         '''
         bias_mask = copy.copy(indices[0, :num_filters])
         bias_mask = bias_mask.type(torch.FloatTensor)
-        #mask0 = torch.zeros(1).to(self.device)
-        #mask1 = torch.ones(1).to(self.device)
-        #indices = indices[0]
-        #indices = indices[:num_filters]
-        #for i, val in enumerate(indices):
-        #    if i == 0:
-        #        if val == 0:
-        #            finalmask = mask0
-        #        else:
-        #            finalmask = mask1
-        #    else:
-        #        if val == 0:
-        #            finalmask = torch.cat((finalmask, mask0),0)
-        #        else:
-        #            finalmask = torch.cat((finalmask, mask1),0)
-        #logging.info("B mask size: {}".format(finalmask.size()))
-        #logging.info("B mask diff: {}".format((finalmask-bias_mask).sum()))
-        #return finalmask
+
         return bias_mask.to(self.device)
 
     def maskbuildweight(self, indices, kernel1, kernel2, num_filters):
@@ -426,29 +491,7 @@ class PruningEnv:
         weight_mask = copy.copy(indices[0,:num_filters]).view(-1,1,1)
         weight_mask = weight_mask.expand(-1,kernel1,kernel2)
         weight_mask = weight_mask.type(torch.FloatTensor)
-        #mask0 = torch.zeros((1,kernel_size, kernel_size))
-        #mask1 = torch.ones((1,kernel_size, kernel_size))
-        #
-        ##Workaround for indices [[]]
-        #indices = indices[0]
-        #indices = indices[:num_filters]
-        #for i, val in enumerate(indices):
-        #    #initialize the mask
-        #    if i == 0:
-        #        if val == 0:
-        #            finalmask = mask0
-        #        else:
-        #            finalmask = mask1
-        #    #concatenate the masks
-        #    else:
-        #        if val == 0:
-        #            finalmask = torch.cat((finalmask, mask0),0)
-        #        else:
-        #            finalmask = torch.cat((finalmask, mask1),0)
 
-        #logging.info("W mask size: {}".format(finalmask.size()))
-        #logging.info("W mask diff: {}".format((weight_mask-finalmask).sum()))
-        #return finalmask
         return weight_mask.to(self.device)
     
     def maskbuildweight2(self, prev_indices, kernel1, kernel2, num_filters_prev):
@@ -600,6 +643,8 @@ class PruningEnv:
                 iterbn = iterbn + 1
 
         return total_filters, amt_pruned 
+
+
 
     def reset_to_k(self):
         ''' resets CNN to partially trained net w/ full params'''
