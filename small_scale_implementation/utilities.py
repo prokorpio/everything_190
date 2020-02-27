@@ -1,5 +1,6 @@
 ## Contains helper tools 
 import time
+import os
 import logging
 logging.basicConfig(level=logging.INFO,
                     format=('%(levelname)s:'+
@@ -12,7 +13,11 @@ import torch.nn.functional as F
 import torch.optim as optim
 from collections import OrderedDict
 
+import torchvision
+import torchvision.transforms as transforms
+
 import models_to_prune
+from temp_files.measure_execution_energy import TrackGPUPower
 
 
 class RandSubnet():
@@ -260,8 +265,118 @@ def compute_weights_and_flops(network_def):
 if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() \
                           else 'cpu')
-    model = models_to_prune.BasicCNN().to(device)
-    print(compute_weights_and_flops(get_network_def_from_model(model,[3,32,32])))
+#    model = models_to_prune.BasicCNN().to(device)
+#    print(compute_weights_and_flops(get_network_def_from_model(model,[3,32,32])))
 
+# Following code used these references:
+# kuangliu/pytorch-cifar
+# hyang1990/energy_constrained_compression
 
+# import dataset
+transform_train = transforms.Compose([
+    #transforms.RandomCrop(32, padding=4),
+    #transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+])
+
+transform_test = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+])
+
+trainset = torchvision.datasets.CIFAR10(root=os.getcwd(), 
+                                        train=True, 
+                                        download=True, 
+                                        transform=transform_train)
+trainloader = torch.utils.data.DataLoader(trainset, 
+                                        batch_size=128, 
+                                        shuffle=True)
+
+testset = torchvision.datasets.CIFAR10(root=os.getcwd(), 
+                                       train=False, 
+                                       download=True, 
+                                       transform=transform_test)
+testloader = torch.utils.data.DataLoader(testset, 
+                                         batch_size=100, 
+                                         shuffle=False)
+
+classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+
+# import model, curled from kuangliu
+device = torch.device("cuda:0" if torch.cuda.is_available() \
+                                else "cpu")
+from temp_files.vgg import VGG
+net = VGG('VGG16').to(device)
+
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
+power_tracker = TrackGPUPower()
+
+train = True
+if train:
+    # start energy tracking
+    power_tracker.start()
+
+    # start time tracking
+    time_per_epoch = []
+    # train for N epoch
+    for epoch in range(10):
+        net.train()
+        total = 0
+        correct = 0
+        train_loss = 0
+        start_time = time.time()
+        for batch_idx, (inputs, labels) in enumerate(trainloader):
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+
+            optimizer.zero_grad()
+            preds = net(inputs)
+            loss = criterion(preds, labels)
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            _, predicted = preds.max(dim=1) # outs (val,idx)
+            total += labels.size(0)
+            correct += predicted.eq(labels).sum().item()
+
+            if batch_idx % 100 == 0:
+                print("Batch %d | Loss: %.3f Acc: %.3f" % \
+                        (batch_idx, train_loss/(batch_idx+1), correct/total))
+
+        time_per_epoch.append(time.time() - start_time) # end time tracking
+    # end energy tracking
+    power_tracker.end()
+
+# parse power measurements
+joule_per_sec = []
+with open(power_tracker.filename) as fp:
+    for line in fp:
+        joule_per_sec.append(float(line[:-3])) # get rid of ' W\n'
+
+see_plots = True
+if see_plots:
+    import matplotlib.pyplot as plt
+    #plt.subplot(2,1,1)
+    plt.plot(joule_per_sec)
+    plt.ylabel('J / sec')
+
+    #plt.subplot(2,1,2)
+    #plt.plot(time_per_epoch)
+    #plt.ylabel('time / epoch')
+    plt.show()
+
+# divide into three parts, get DC power of middle part (J/s)
+third = int(len(joule_per_sec)/3)
+DC_joule_per_sec = sum(joule_per_sec[third:2*third]) / third
+
+# get energy_per_epoch = DC_power * sec/epoch
+sec_per_epoch = sum(time_per_epoch) / len(time_per_epoch)
+energy_per_epoch = DC_joule_per_sec * sec_per_epoch 
+
+print('sec/epoch', sec_per_epoch)
+print('J/sec', DC_joule_per_sec)
+print('J/epoch', energy_per_epoch)
 
