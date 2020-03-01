@@ -19,12 +19,12 @@ class TrackGPUPower():
     ''' Record GPU power in real time using 'nvidia-smi' 
         Adapted from ECC: hyang1990/energy_constrained_compression
     '''
-    def __init__(self, gpuid=0, rm_watts_offset=False, file='power.txt',
+    def __init__(self, gpuid=0, get_watts_offset=True, file='power.txt',
                        time_stamp=False, loop_time=1, grain='sec'):
         self.filename = file
         # handle idle watts
         self.idle_watts = 0.0
-        if not rm_watts_offset:
+        if get_watts_offset:
             cmd = 'nvidia-smi --query-gpu=power.draw ' + \
                     '--id={} '.format(gpuid) + \
                     '--format=csv,noheader'

@@ -103,6 +103,7 @@ pow_per_ms = {'pow':[] , 'ms':[]}
 fmt = '%Y/%m/%d %H:%M:%S.%f'
 with open('power.txt') as fp:
     for line in fp:
+        # ff are vectors
         pow_per_ms['pow'].append(float(line.split()[-2]))
         pow_per_ms['ms'].append(strptime(line.split(',')[0],fmt).timestamp())
 
@@ -110,18 +111,21 @@ with open('power.txt') as fp:
 iter_dc_layer_power = [] # cols: list whose elements are dc pow per layer 
                          # rows: different iters
 # turn key:list --> key:np.array
-pow_per_ms['pow'] = np.array(pow_per_ms['pow'])
-pow_per_ms['ms'] = np.array(pow_per_ms['ms'])
+#pow_per_ms['pow'] = np.array(pow_per_ms['pow'])
+#pow_per_ms['ms'] = np.array(pow_per_ms['ms'])
+
+# Increase data point resolution by interpolation
+x = np.array(pow_per_ms['ms'])
+y = np.array(pow_per_ms['pow'])
+new_x = np.linspace(x.min(), x.max(), 2*x.size) # increase data points 2x
+new_y = np.interp(new_x, x, y) # evaluate at new x
+
 for iter_ in range(len(globe.iter_layertimes)):
 # partition per fwd pass iter
     start_time = globe.iter_layertimes[iter_][0] # start time of this iteration
     end_time = globe.iter_layertimes[iter_][-1]
-    powers = pow_per_ms['pow'][(pow_per_ms['ms'] >= start_time) \
-                               & \
-                               (pow_per_ms['ms'] <= end_time)]
-    times = pow_per_ms['ms'][(pow_per_ms['ms'] >= start_time) \
-                               & \
-                               (pow_per_ms['ms'] <= end_time)]
+    powers = new_y[(new_x >= start_time) & (new_x <= end_time)]
+    times = new_x[(new_x >= start_time) & (new_x <= end_time)]
     #pow_per_iter.append(list(powers)) 
 
     # partition each powers withinin this iter into layers
@@ -129,15 +133,14 @@ for iter_ in range(len(globe.iter_layertimes)):
     for layer_ in range(len(globe.iter_layertimes[iter_][:-1])):
         start_time = globe.iter_layertimes[layer_]
         next_start = globe.iter_layertimes[layer_+1]
-        # layer time = start_time to next start_time
+        # layer time is start_time to next start_time
         layer_powers = powers[(times >= start_time) & (times <= next_start)]
         dc_layer_power.append(layer_powers.mean())
 
     iter_dc_layer_power.append(dc_layer_powers)
 
 # get average layer exec pow per fwd pass
-iter_dc_layer_power = np.array(iter_dc_layer_power)
-ave_layer_power = iter_dc_layer_power.mean(axis=0) # vector 
+ave_layer_power = np.array(iter_dc_layer_power).mean(axis=0) # vector 
 print(ave_layer_power)
 
 # get time delta's
@@ -146,7 +149,6 @@ layer_times = layer_times[:,:-1] - layer_times[:,1:]
 # get layer's average exec time per fwd pass
 ave_layer_times = layer_times.mean(axis=0)
 print(ave_layer_times)
-# match time and power to layer
                 
 
 # jeff: curled from kuangliu/pytorch-cifar
