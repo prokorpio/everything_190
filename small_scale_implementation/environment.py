@@ -409,7 +409,7 @@ class PruningEnv:
             mask[mag_rank[1]] = 0
             padded_weights = torch.zeros([512])
             # print(mask)
-        if method == 'weight_norm_and_var':
+        elif method == 'weight_norm_and_var':
             for name, module in self.model.named_modules(): # this model changes
                 if self.layer in name:
                     conv_layer = module
@@ -430,7 +430,7 @@ class PruningEnv:
             
             mask[mag_rank[1]] = 0
             padded_weights = torch.zeros([512])
-        if method == 'grad_norm':
+        elif method == 'grad_norm':
             loss_func = nn.CrossEntropyLoss()
             optimizer = optim.Adam(self.model.parameters(0.0008))
 
@@ -650,9 +650,11 @@ class PruningEnv:
         ''' resets CNN to partially trained net w/ full params'''
         #self.model.load_state_dict(self.init_full_weights)
 
-        self.model = copy.deepcopy(torch.load(os.getcwd() + \
-                                                '/partially_trained_3.pt',
-                                                map_location = self.device))
+        #self.model = copy.deepcopy(torch.load(os.getcwd() + \
+        #                                        '/partially_trained_3.pt',
+        #                                        map_location = self.device))
+        self.model.load_state_dict(torch.load(os.getcwd() + \
+                                                '/partially_trained_3_v2.pth'))
         # initialize starting layer to process
         self.layer = self.layers_to_prune[0]
         # initialize prune amounts to zer
