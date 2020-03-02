@@ -151,4 +151,4 @@ ave_layer_times = layer_times.mean(axis=0)
 print(ave_layer_times)
                 
 
-# jeff: curled from kuangliu/pytorch-cifar
+# jeff: base code curled from kuangliu/pytorch-cifar
