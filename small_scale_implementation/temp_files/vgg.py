@@ -37,12 +37,25 @@ class VGG(nn.Module):
         layers += [nn.AvgPool2d(kernel_size=1, stride=1)]
         return nn.Sequential(*layers)
 
+if __name__ == '__main__':
 
-def test():
-    net = VGG('VGG11')
-    x = torch.randn(2,3,32,32)
-    y = net(x)
-    print(y.size())
+    def test():
+        net = VGG('VGG11')
+        x = torch.randn(2,3,32,32)
+        y = net(x)
+        print(y.size())
+        return net
 
-# test()
+    net = test()
+    for m in net.modules():
+        if isinstance(m, nn.BatchNorm2d):
+            print(m.__class__.__name__)
+            print(m.weight.data.shape)
+            
+
+
+
+
+
+
 # jeff: curled from kuangliu/pytorch-cifar

@@ -19,12 +19,12 @@ class TrackGPUPower():
     ''' Record GPU power in real time using 'nvidia-smi' 
         Adapted from ECC: hyang1990/energy_constrained_compression
     '''
-    def __init__(self, gpuid=0, rm_watts_offset=False, file='power.txt',
-                       reso=1):
+    def __init__(self, gpuid=0, get_watts_offset=True, file='power.txt',
+                       time_stamp=False, loop_time=1, grain='sec'):
         self.filename = file
         # handle idle watts
         self.idle_watts = 0.0
-        if not rm_watts_offset:
+        if get_watts_offset:
             cmd = 'nvidia-smi --query-gpu=power.draw ' + \
                     '--id={} '.format(gpuid) + \
                     '--format=csv,noheader'
@@ -34,13 +34,22 @@ class TrackGPUPower():
             self.idle_watts /= 10 # get ave of 10 samples
 
         # set command
-        # note may use ms reso with --loop-ms
-        self.cmd = ['nvidia-smi'] + \
-                   ['--query-gpu=power.draw'] + \
-                   ['--loop={}'.format(reso)] + \
-                   ['--id={}'.format(gpuid)] + \
-                   ['--filename={}'.format(file)] + \
-                   ['--format=csv,noheader']
+        self.cmd = ['nvidia-smi'] 
+
+        if time_stamp: 
+              self.cmd += ['--query-gpu=power.draw,timestamp'] 
+        else:
+              self.cmd += ['--query-gpu=power.draw']
+
+        if grain == 'sec':
+            self.cmd += ['--loop={}'.format(loop_time)] 
+        elif grain == 'ms':
+            self.cmd += ['--loop-ms={}'.format(loop_time)] 
+
+        # the rest
+            self.cmd += ['--id={}'.format(gpuid)] + \
+                        ['--filename={}'.format(file)] + \
+                        ['--format=csv,noheader']
 
     def start(self):
         self.proc = subprocess.Popen(self.cmd) 
