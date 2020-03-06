@@ -1,0 +1,14 @@
+CUDA_VISIBLE_DEVICES=0 python main_c.py \
+--dataset cifar10 \
+--arch BasicCNN2 \
+--depth 4 \
+--lr 0.1 \
+--epochs 160 \
+--schedule 80 120 \
+--batch-size 256 \
+--test-batch-size 256 \
+--save ./baseline/vgg16-cifar10_withrank/retrain_70_10_70 \
+--momentum 0.9 \
+--sparsity-regularization \
+--scratch ./baseline/vgg16-cifar10_withrank/pruned_70_10_70/pruned.pth.tar \
+--start-epoch 10

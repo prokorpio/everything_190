@@ -8,7 +8,16 @@
 !misc/
 !small_scale_implementation/
 !small_scale_implementation_baseline/
+!early_bird_experiments/
 
+early_bird_experiments/data.cifar10
+early_bird_experiments/data.cifar100
+early_bird_experiments/baseline
+early_bird_experiments/__pycache__
+early_bird_experiments/*.json
+
+early_bird_experiments/models/__pycache__
+early_bird_experiments/optim/__pycache__
 
 
 small_scale_implementation/*

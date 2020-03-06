@@ -1,0 +1,13 @@
+CUDA_VISIBLE_DEVICES=0 python main.py \
+--dataset cifar10 \
+--arch BasicCNN2 \
+--depth 4 \
+--lr 0.08 \
+--epochs 160 \
+--schedule 80 120 \
+--batch-size 256 \
+--test-batch-size 256 \
+--save ./baseline/cifar10basic2_withtrans_256 \
+--momentum 0.9 \
+--sparsity-regularization
+--timerank

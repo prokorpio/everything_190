@@ -84,21 +84,37 @@ class VGG(nn.Module):
 # add start/end for AvgPool
 # add for Linear
 from measure_execution_energy import TrackGPUPower
-
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(device)
 def test():
-    net = VGG('VGG11')
-    x = torch.randn(2,3,32,32)
+    start = time.time()
+    net = VGG('VGG11').to(device)
+    x = torch.randn(128,3,32,32).to(device)
     #pow_track = TrackGPUPower(time_stamp=True, grain='ms')
     #pow_track.start()
+    #time.sleep(0.5)
     y = net(x)
     y = net(x)
     y = net(x)
+    print(time.time() - start)
+    #time.sleep(0.5)
     #pow_track.end()
 
-test()
+# perform gpu warmup here
+#a = torch.randn(128,3,32,32).to(device)
+#b = torch.randn(128,3,32,32).to(device)
+#c = a @ b
+#print(c.shape)
+with torch.autograd.profiler.profile(use_cuda=True) as prof:
+    test()
+print(prof.key_averages().table(sort_by='cuda_time_total'))
+prof.export_chrome_trace('tracing.json')
+exit()
+# ----------READ POWER READINGS-----------
 
-# read power readings
-from datetime.datetime import strptime
+from datetime import datetime 
+strptime = datetime.strptime
+
 pow_per_ms = {'pow':[] , 'ms':[]}
 fmt = '%Y/%m/%d %H:%M:%S.%f'
 with open('power.txt') as fp:
@@ -117,9 +133,21 @@ iter_dc_layer_power = [] # cols: list whose elements are dc pow per layer
 # Increase data point resolution by interpolation
 x = np.array(pow_per_ms['ms'])
 y = np.array(pow_per_ms['pow'])
-new_x = np.linspace(x.min(), x.max(), 2*x.size) # increase data points 2x
+new_x = np.linspace(x.min(), x.max(), 100*x.size) # increase reso 100x
 new_y = np.interp(new_x, x, y) # evaluate at new x
 
+import matplotlib.pyplot as plt
+plt.subplot(2,1,1)
+plt.plot(x,y,'ro-')
+
+plt.subplot(2,1,2)
+plt.plot(new_x,new_y,'bo-')
+plt.plot(globe.iter_layertimes[0][0],100,'go-')
+plt.plot(globe.iter_layertimes[-1][-1],100,'go-')
+plt.show()
+
+count_of_missing = 0
+np.set_printoptions(precision=12)
 for iter_ in range(len(globe.iter_layertimes)):
 # partition per fwd pass iter
     start_time = globe.iter_layertimes[iter_][0] # start time of this iteration
@@ -131,24 +159,34 @@ for iter_ in range(len(globe.iter_layertimes)):
     # partition each powers withinin this iter into layers
     dc_layer_power = [] # mean of joule/ms within layer exec time
     for layer_ in range(len(globe.iter_layertimes[iter_][:-1])):
-        start_time = globe.iter_layertimes[layer_]
-        next_start = globe.iter_layertimes[layer_+1]
+        print('iter:',iter_,'layer',layer_)
+        start_time = globe.iter_layertimes[iter_][layer_]
+        next_start = globe.iter_layertimes[iter_][layer_+1]
         # layer time is start_time to next start_time
         layer_powers = powers[(times >= start_time) & (times <= next_start)]
-        dc_layer_power.append(layer_powers.mean())
+        if layer_powers.size:
+            dc_layer_power.append(layer_powers.mean()) # ave across time
+        else:
+            print('Need higer reso data!!')
+            print(layer_powers)
+            count_of_missing += 1
+            dc_layer_power.append(0)
 
-    iter_dc_layer_power.append(dc_layer_powers)
+    iter_dc_layer_power.append(dc_layer_power)
 
 # get average layer exec pow per fwd pass
 ave_layer_power = np.array(iter_dc_layer_power).mean(axis=0) # vector 
-print(ave_layer_power)
+#print(iter_dc_layer_power)
+print('power per layer:',ave_layer_power)
+print('holes in data:',count_of_missing)
 
 # get time delta's
 layer_times = np.array(globe.iter_layertimes)
 layer_times = layer_times[:,:-1] - layer_times[:,1:]
 # get layer's average exec time per fwd pass
 ave_layer_times = layer_times.mean(axis=0)
-print(ave_layer_times)
+print('time_per_layer:',ave_layer_times)
+print('sum time:', ave_layer_times.sum())
                 
 
 # jeff: base code curled from kuangliu/pytorch-cifar

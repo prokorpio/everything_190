@@ -44,6 +44,8 @@ class BasicCNN(nn.Module):
         x = F.relu(self.conv4(x))
         x = self.dropout(x)
         x = self.bn4(x)
+
+        #print(x.shape,"Shape of X")
         x = x.view(-1,512*4*4)
         x = (self.fc1(x))#Dense
         x = self.softmax(x)

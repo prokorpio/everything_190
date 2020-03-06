@@ -37,7 +37,7 @@ class TrackGPUPower():
         self.cmd = ['nvidia-smi'] 
 
         if time_stamp: 
-              self.cmd += ['--query-gpu=power.draw,timestamp'] 
+              self.cmd += ['--query-gpu=timestamp,power.draw'] 
         else:
               self.cmd += ['--query-gpu=power.draw']
 
@@ -66,7 +66,7 @@ class TrackGPUPower():
 
 if __name__ == '__main__':
     # test
-    power_tracker = TrackGPUPower()
+    power_tracker = TrackGPUPower(time_stamp=True, grain='ms')
     power_tracker.start()
     for i in range(5):
         time.sleep(1)
