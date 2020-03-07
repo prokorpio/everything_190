@@ -81,7 +81,7 @@ if args.model:
             model.load_state_dict(checkpoint['state_dict'])
             #TODO: get time ranking from checkpoint
         time_per_layer = checkpoint['time_ranking']
-        print('time_per_layer',time_per_layer)
+        print('time_per_layer:', time_per_layer)
         # print("=> loaded checkpoint '{}' (epoch {}) Prec1: {:f}"
               # .format(args.model, checkpoint['epoch'], best_prec1))
     else:
@@ -112,8 +112,7 @@ for m in model.modules():
     if isinstance(m, nn.BatchNorm2d):
         size = m.weight.data.shape[0]
         bn[index:(index+size)] = m.weight.data.abs().clone()
-        an[index:(index+size)] = torch.ones((size))*\
-                                    (1 - float(time_per_layer[layer]))
+        an[index:(index+size)] = torch.ones((size))/float(time_per_layer[layer])
         index += size
         layer += 1
 
@@ -135,7 +134,7 @@ for k, m in enumerate(model.modules()):
     if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
         # TODO: Incorporate alpha in weight_copy
         weight_copy = m.weight.data.abs().clone()
-        weight_copy = weight_copy*(1 - float(time_per_layer[layer]))
+        weight_copy = weight_copy/float(time_per_layer[layer])
         mask = weight_copy.gt(thre.cuda()).float().cuda()
         #print('thre', thre)
         #print('weight', weight_copy)
