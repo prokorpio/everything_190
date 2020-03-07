@@ -1,21 +1,6 @@
 import subprocess as sp
 import os
 
-#Run main.py to find the earlybird
-	#base .sh is search2.sh
-	#Verify that the correct "an" is used
-
-#Run BasicCNNprune2.py to actually prune the earlybird found.
-	#Base .sh is pruneBasicCNN2.sh
-	#Needs the location of the EarlyBirdTicket found in main.py
-	#Saves result to args.save in such a way that you can refer to it in the next shell script
-
-#Run main_c.py to train the pruned models to convergence
-	#Base .sh is retrain_continue2.sh
-	#Needs the location of actually pruned model found in BasicCNNprune2.py (previous args.save)
-	#Saves result to args.save
-	#Get time per epoch at the end.
-
 def find_prune_train(arch = 'BasicCNN2',
                      depth = 4,
                      file_path = './baseline/',
@@ -41,12 +26,13 @@ def find_prune_train(arch = 'BasicCNN2',
 
     find_EB_cmd = ['python', 'main.py',
                     '--dataset','cifar10',
-                    '--lr','0.08',
+                    '--lr','0.1',
                     '--epochs','160',
                     '--schedule',' 80','120',
                     '--batch-size','256',
                     '--test-batch-size','256',
                     '--momentum','0.9',
+                    '--weight-decay', '1e-4',
                     '--sparsity-regularization',
                     '--arch' , arch,
                     '--depth' , str(depth),
@@ -123,6 +109,7 @@ def find_prune_train(arch = 'BasicCNN2',
                     '--batch-size', '256', 
                     '--test-batch-size', '256', 
                     '--momentum', '0.9', 
+                    '--weight-decay', '1e-4',
                     '--sparsity-regularization', 
                     '--save',  '_',  # to be changed later
                     '--start-epoch', '_',  # to be changed later
@@ -159,8 +146,6 @@ def find_prune_train(arch = 'BasicCNN2',
             train_EB_cmd[-1] = pruned_model
             print('Running:\n ' + ' '.join(train_EB_cmd))
             sp.run(train_EB_cmd)
-
-
 
 # =========================== MAIN LOOP ============================
 
