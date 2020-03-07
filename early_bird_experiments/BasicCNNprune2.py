@@ -79,8 +79,8 @@ if args.model:
                 model.load_state_dict(checkpoint['state_dict'])
         else:
             model.load_state_dict(checkpoint['state_dict'])
-            #TODO: get mask from checkpoint
-            time_per_layer = checkpoint['time_profile']
+            #TODO: get time ranking from checkpoint
+            time_per_layer = checkpoint['time_ranking']
         # print("=> loaded checkpoint '{}' (epoch {}) Prec1: {:f}"
               # .format(args.model, checkpoint['epoch'], best_prec1))
     else:

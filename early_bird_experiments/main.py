@@ -464,6 +464,8 @@ for epoch in range(args.start_epoch, args.epochs):
             'epoch': epoch + 1,
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
+            'time_ranking': time_per_layer, # 0 or has value, handled by
+                                            # --timerank
             'optimizer': optimizer.state_dict(),
             }, is_best, 'EB-30', filepath=args.save) # changed 'EB-30-'+str(epoch+1) -> 'EB-30'
             EB_epoch_record.append('30%-EB: ' + str(epoch))          
@@ -475,6 +477,8 @@ for epoch in range(args.start_epoch, args.epochs):
             'epoch': epoch + 1,
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
+            'time_ranking': time_per_layer, # 0 or has value, handled by
+                                            # --timerank
             'optimizer': optimizer.state_dict(),
             }, is_best, 'EB-50', filepath=args.save) # changed 'EB-50-'+str(epoch+1) -> 'EB-50'
             EB_epoch_record.append('50%-EB: ' + str(epoch))
@@ -486,6 +490,8 @@ for epoch in range(args.start_epoch, args.epochs):
             'epoch': epoch + 1,
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
+            'time_ranking': time_per_layer, # 0 or has value, handled by
+                                            # --timerank
             'optimizer': optimizer.state_dict(),
             }, is_best, 'EB-70', filepath=args.save) # changed 'EB-70-'+str(epoch+1) -> 'EB-70'
             EB_epoch_record.append('70%-EB: ' + str(epoch))
