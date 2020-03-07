@@ -15,6 +15,7 @@ import os
 	#Needs the location of actually pruned model found in BasicCNNprune2.py (previous args.save)
 	#Saves result to args.save
 	#Get time per epoch at the end.
+
 def find_prune_train(arch = 'BasicCNN2',
                      depth = 4,
                      file_path = './baseline/',
@@ -26,8 +27,8 @@ def find_prune_train(arch = 'BasicCNN2',
                 arch + str('_'+str(depth)) + \
                 '/trial_' + str(trial_num)
 
-    EB_folder = os.path.join(file_path,'EBs_found')
-    timed_EB_folder = os.path.join(file_path+'_timed','EBs_found')
+    EB_folder = os.path.join(file_path,'found_EBs')
+    timed_EB_folder = os.path.join(file_path+'_timed','found_EBs')
 
     pruned_EB_folder = os.path.join(file_path,'pruned_EBs')
     timed_pruned_EB_folder = os.path.join(file_path+'_timed','pruned_EBs')

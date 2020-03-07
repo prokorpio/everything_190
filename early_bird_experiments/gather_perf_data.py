@@ -42,7 +42,8 @@ def get_data(base_path = './baseline', model_list = ['vgg_16']):
             trained_path = os.path.join(model_path, tr_dir, 'trained_EBs')
             sparsity_dirs = os.listdir(trained_path)
             sparsity_dirs = [d for d in sparsity_dirs if 'EB' in d]
-            for sp_num, sp_dir in enumerate(sparsity_dirs):
+            for sp_dir in sparsity_dirs:
+                sp_num = ['30','50','70'].index(sp_dir[3:])
                 record_file = os.path.join(trained_path, sp_dir, 'record.txt')
                 time_file = os.path.join(trained_path, sp_dir, 'time.txt')
                 with open(record_file) as fp:
@@ -59,7 +60,8 @@ def get_data(base_path = './baseline', model_list = ['vgg_16']):
             EB_epoch_file = os.path.join(model_path, tr_dir,
                                         'EBs_found','EB_epoch.txt') 
             with open(EB_epoch_file) as fp:  
-                for sp_num, line in enumerate(fp): # get num epoch EB found
+                for line in fp: # get num epoch EB found
+                    sp_num = ['30','50','70'].index(line[:2])
                     epoch = line[8:-1]
                     if epoch.isdigit():
                         out_dict[model][tr_num,sp_num,type_num,2] = int(line[8:-1])
@@ -88,7 +90,9 @@ def dict_to_xl(output,xl_name=None):
             model_table.to_excel(os.path.join(os.getcwd(), (xl_name+'.xlsx')))
 
 if __name__ == '__main__':
-    out_dict = get_data()
+    out_dict = get_data(base_path='./',
+                        model_list = ['BasicCNN2_4','vgg_16'])
+                        
     dict_to_xl(out_dict)
 
     # get ave across trials
