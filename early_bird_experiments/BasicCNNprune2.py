@@ -27,6 +27,8 @@ parser.add_argument('--percent', type=float, default=0.5,
                     help='scale sparse rate (default: 0.5)')
 parser.add_argument('--model', default='', type=str, metavar='PATH',
                     help='path to the model (default: none)')
+parser.add_argument('--time-per-layer', default='', type=str, metavar='PATH',
+                    help='path to the model time profile (default: none)')
 parser.add_argument('--save', default='', type=str, metavar='PATH',
                     help='path to save pruned model (default: none)')
 parser.add_argument('--arch', type=str, default='vgg',
@@ -58,11 +60,11 @@ if args.dataset == "imagenet":
 else:
     model = BasicCNN2(dataset=args.dataset, depth=args.depth)
     print("USING BasicCNN")
-mynet = BasicCNN2()
+#mynet = BasicCNN2()
 
-myx = Variable(torch.FloatTensor(16, 3, 32, 32))
-myy = mynet(myx)
-print(myy.data.shape,"Surely the network exists")
+#myx = Variable(torch.FloatTensor(16, 3, 32, 32))
+#myy = mynet(myx)
+#print(myy.data.shape,"Surely the network exists")
 if args.model:
     if os.path.isfile(args.model):
         print("=> loading checkpoint '{}'".format(args.model))
@@ -77,6 +79,8 @@ if args.model:
                 model.load_state_dict(checkpoint['state_dict'])
         else:
             model.load_state_dict(checkpoint['state_dict'])
+            #TODO: get mask from checkpoint
+            time_per_layer = checkpoint['time_profile']
         # print("=> loaded checkpoint '{}' (epoch {}) Prec1: {:f}"
               # .format(args.model, checkpoint['epoch'], best_prec1))
     else:
@@ -98,16 +102,32 @@ for m in model.modules():
     if isinstance(m, nn.BatchNorm2d):
         total += m.weight.data.shape[0]
 
+# TODO: read times per layer from a file and scale
+# time per layer should be one line entry per layer
+#time_per_layer = []
+#with open(args.time_per_layer) as fp:
+#    for line in fp:
+#        time_per_layer.append(line[:-1]) # remove \n
+# scale
+from energyreader import minmaxer
+time_per_layer = minmaxer(time_per_layer)
+
+# TODO: incorp alpha in finding the thresh
 bn = torch.zeros(total)
+an = torch.zeros(total)
 index = 0
+layer = 0
 for m in model.modules():
     if isinstance(m, nn.BatchNorm2d):
         size = m.weight.data.shape[0]
         bn[index:(index+size)] = m.weight.data.abs().clone()
+        an[index:(index+size)] = torch.ones((size))*\
+                                    (1 - float(time_per_layer[layer]))
         index += size
+        layer += 1
 
 p_flops = 0
-y, i = torch.sort(bn)
+y, i = torch.sort(bn*an)
 # comparsion and permutation (sort process)
 p_flops += total * np.log2(total) * 3
 thre_index = int(total * args.percent)
@@ -116,18 +136,22 @@ thre = y[thre_index]
 pruned = 0
 cfg = []
 cfg_mask = []
+layer = 0
 for k, m in enumerate(model.modules()):
     if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
+        # TODO: Incorporate alpha in weight_copy
         weight_copy = m.weight.data.abs().clone()
+        weight_copy = weight_copy*(1 - float(time_per_layer[layer]))
         mask = weight_copy.gt(thre.cuda()).float().cuda()
         pruned = pruned + mask.shape[0] - torch.sum(mask)
         m.weight.data.mul_(mask)
         m.bias.data.mul_(mask)
         if int(torch.sum(mask)) > 0:
-            cfg.append(int(torch.sum(mask)))
-        cfg_mask.append(mask.clone())
+            cfg.append(int(torch.sum(mask))) # get layer size for new model
+        cfg_mask.append(mask.clone()) # append to per layer mask cfg
         print('layer index: {:d} \t total channel: {:d} \t remaining channel: {:d}'.
             format(k, mask.shape[0], int(torch.sum(mask))))
+        layer += 1
     elif isinstance(m, nn.MaxPool2d):
         cfg.append('M')
 
@@ -145,6 +169,7 @@ print('  + Flops for pruning: %.2fM' % (p_flops / 1e6))
 print('Pre-processing Successful!')
 
 # simple test model after Pre-processing prune (simple set BN scales to zeros)
+
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
     maxk = max(topk)
@@ -210,13 +235,15 @@ def test(model):
 
 # acc = test(model)
 
+
 # Make real prune
-print(cfg)
+
+#print(cfg)
 if args.dataset == "imagenet":
     newmodel = slimmingvgg(dataset=args.dataset, cfg=cfg)
 else:
-    newmodel = BasicCNN2(dataset=args.dataset, cfg=cfg)
-
+    newmodel = BasicCNN2(dataset=args.dataset, cfg=cfg) # create new model
+                                                        # accdg to cfg
 
 if len(args.gpu_ids) > 1:
     newmodel = torch.nn.DataParallel(newmodel, device_ids=args.gpu_ids)
@@ -278,9 +305,8 @@ for [m0, m1] in zip(model.modules(), newmodel.modules()):
 
 torch.save({'cfg': cfg, 'state_dict': newmodel.state_dict()}, os.path.join(args.save, 'pruned.pth.tar'))
 
-# print(newmodel)
 model = newmodel
-print(model)
+#print(model)
 # test(model)
 param = print_model_param_nums(model)
 flops = print_model_param_flops(model.cpu(), 32, True)
@@ -289,13 +315,3 @@ with open(savepath, "w") as fp:
     fp.write("new model flops: \n"+str(flops)+"\n")
 print('new model param: ', param)
 print('new model flops: ', flops)
-
-
-# python vggprune.py \
-# --dataset cifar100 \
-# --test-batch-size 256 \
-# --depth 16 \
-# --percent 0.3 \
-# --model ./baseline/vgg16-cifar100/EB-30-35.pth.tar \
-# --save ./baseline/vgg16-cifar100/pruned_3035_0.3 \
-# --gpu_ids 0
