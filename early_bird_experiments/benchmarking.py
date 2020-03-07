@@ -151,7 +151,7 @@ def find_prune_train(arch = 'BasicCNN2',
 
 if __name__ == '__main__':
     num_of_trials = 2
-    models = ['BasicCNN2', 'vgg']
+    models = ['BasicCNN2']
     model_depths = [4,16]
 
     #find_prune_train(arch='vgg', depth=16, timed=True) 

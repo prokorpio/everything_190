@@ -80,7 +80,8 @@ if args.model:
         else:
             model.load_state_dict(checkpoint['state_dict'])
             #TODO: get time ranking from checkpoint
-            time_per_layer = checkpoint['time_ranking']
+        time_per_layer = checkpoint['time_ranking']
+        print('time_per_layer',time_per_layer)
         # print("=> loaded checkpoint '{}' (epoch {}) Prec1: {:f}"
               # .format(args.model, checkpoint['epoch'], best_prec1))
     else:
@@ -102,16 +103,6 @@ for m in model.modules():
     if isinstance(m, nn.BatchNorm2d):
         total += m.weight.data.shape[0]
 
-# TODO: read times per layer from a file and scale
-# time per layer should be one line entry per layer
-#time_per_layer = []
-#with open(args.time_per_layer) as fp:
-#    for line in fp:
-#        time_per_layer.append(line[:-1]) # remove \n
-# scale
-from energyreader import minmaxer
-time_per_layer = minmaxer(time_per_layer)
-
 # TODO: incorp alpha in finding the thresh
 bn = torch.zeros(total)
 an = torch.zeros(total)
@@ -128,6 +119,9 @@ for m in model.modules():
 
 p_flops = 0
 y, i = torch.sort(bn*an)
+print('bn:' , bn)
+print('an:' , an)
+print('y:' , y)
 # comparsion and permutation (sort process)
 p_flops += total * np.log2(total) * 3
 thre_index = int(total * args.percent)
@@ -143,6 +137,9 @@ for k, m in enumerate(model.modules()):
         weight_copy = m.weight.data.abs().clone()
         weight_copy = weight_copy*(1 - float(time_per_layer[layer]))
         mask = weight_copy.gt(thre.cuda()).float().cuda()
+        #print('thre', thre)
+        #print('weight', weight_copy)
+        #print('mask', mask)
         pruned = pruned + mask.shape[0] - torch.sum(mask)
         m.weight.data.mul_(mask)
         m.bias.data.mul_(mask)
