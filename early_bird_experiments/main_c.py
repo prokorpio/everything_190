@@ -264,23 +264,24 @@ best_prec1 = 0.
 import time
 time_per_epoch = []
 for epoch in range(args.start_epoch, args.epochs):
-	if epoch in args.schedule:
-		for param_group in optimizer.param_groups:
-			param_group['lr'] *= 0.1
-	tic = time.time()
-	train(epoch)
-	time_per_epoch.append(time.time() - tic)
-	prec1 = test()
-	history_score[epoch][2] = prec1
-	np.savetxt(os.path.join(args.save, 'record.txt'), history_score, fmt = '%10.5f', delimiter=',')
-	is_best = prec1 > best_prec1
-	best_prec1 = max(prec1, best_prec1)
-	save_checkpoint({
+    if epoch in args.schedule:
+        for param_group in optimizer.param_groups:
+            param_group['lr'] *= 0.1
+    tic = time.time()
+    train(epoch)
+    time_per_epoch.append(time.time() - tic)
+    prec1 = test()
+    history_score[epoch][2] = prec1
+    np.savetxt(os.path.join(args.save, 'record.txt'), history_score, fmt = '%10.5f', delimiter=',')
+    is_best = prec1 > best_prec1
+    best_prec1 = max(prec1, best_prec1)
+    if epoch % 10 == 0:
+        save_checkpoint({
         'epoch': epoch + 1,
         'state_dict': model.state_dict(),
         'best_prec1': best_prec1,
         'optimizer': optimizer.state_dict(),
-    }, is_best, filepath=args.save)
+        }, is_best, filepath=args.save)
 
 print("Best accuracy: "+str(best_prec1))
 history_score[-1][0] = best_prec1

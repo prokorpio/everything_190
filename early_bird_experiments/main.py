@@ -508,12 +508,15 @@ for epoch in range(args.start_epoch, args.epochs):
     np.savetxt(os.path.join(args.save, 'EB_epoch.txt'), EB_epoch_record, fmt = '%s')
     is_best = prec1 > best_prec1
     best_prec1 = max(prec1, best_prec1)
-    save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
-            'optimizer': optimizer.state_dict(),
-            }, is_best, epoch, filepath=args.save)
+    if epoch % 10 == 0:
+        save_checkpoint({
+                'epoch': epoch + 1,
+                'state_dict': model.state_dict(),
+                'best_prec1': best_prec1,
+                'time_ranking': time_per_layer, # 0 or has value, handled by
+                                            # --timerank
+                'optimizer': optimizer.state_dict(),
+                }, is_best, epoch, filepath=args.save)
 
     if not (flag_70 or flag_50 or flag_30):
         print(EB_epoch_record)
