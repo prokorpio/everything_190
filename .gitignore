@@ -25,6 +25,7 @@ small_scale_implementation_baseline/*
 !small_scale_implementation/runs/*
 !small_scale_implementation/*.py
 !small_scale_implementation/*.pt
+!small_scale_implementation/sgd_90_5th_epoch_v2.pth
 !small_scale_implementation_baseline/*.py
 !small_scale_implementation_baseline/*.pt
 !small_scale_implementation_baseline/*.pth

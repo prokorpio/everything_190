@@ -107,9 +107,9 @@ class RandSubnet():
                 total += labels.size(0) # number of rows = num of samples
                 correct += (prediction == labels).sum().item() 
 
-        val_acc = correct/total
+        val_acc = float(correct/total)
         
-        return val_acc
+        return val_acc, correct, total
 
 def extract_feature_map_sizes(model, input_data_shape, device = None):
     ''' Hook to get conv and fc layerwise feat map sizes
