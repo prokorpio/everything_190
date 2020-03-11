@@ -4,7 +4,7 @@ import os
 import pandas as pd
 import numpy as np
 
-def get_data(base_path = './baseline', model_list = ['vgg_16']):
+def get_data(base_path = './baseline/', model_list = ['vgg_16']):
     ''' Collect benchmarking data 
      inputs:
         base_path:  path to folder containing model-type_depth folders
@@ -58,7 +58,7 @@ def get_data(base_path = './baseline', model_list = ['vgg_16']):
 
             # go to 'EBs_found' folder
             EB_epoch_file = os.path.join(model_path, tr_dir,
-                                        'EBs_found','EB_epoch.txt') 
+                                        'found_EBs','EB_epoch.txt') 
             with open(EB_epoch_file) as fp:  
                 for line in fp: # get num epoch EB found
                     sp_num = ['30','50','70'].index(line[:2])
@@ -90,7 +90,7 @@ def dict_to_xl(output,xl_name=None):
             model_table.to_excel(os.path.join(os.getcwd(), (xl_name+'.xlsx')))
 
 if __name__ == '__main__':
-    out_dict = get_data(base_path='./',
+    out_dict = get_data(base_path='./baseline/',
                         model_list = ['BasicCNN2_4','vgg_16'])
                         
     dict_to_xl(out_dict)

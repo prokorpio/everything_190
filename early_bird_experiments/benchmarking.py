@@ -1,6 +1,6 @@
 import subprocess as sp
 import os
-
+from gather_perf_data import *
 def find_prune_train(arch = 'BasicCNN2',
                      depth = 4,
                      file_path = './baseline/',
@@ -70,6 +70,7 @@ def find_prune_train(arch = 'BasicCNN2',
                 extract_EB_cmd[-5] = '0.' + EB[3]
                 extract_EB_cmd[-3] = os.path.join(timed_pruned_EB_folder,EB[:5])
                 extract_EB_cmd[-1] = os.path.join(timed_EB_folder,EB)
+
                 print('Running:\n ' + ' '.join(extract_EB_cmd))
                 sp.run(extract_EB_cmd)
         else:
@@ -86,6 +87,7 @@ def find_prune_train(arch = 'BasicCNN2',
                 extract_EB_cmd[-5] = '0.' + EB[3]
                 extract_EB_cmd[-3] = os.path.join(timed_pruned_EB_folder,EB[:5])
                 extract_EB_cmd[-1] = os.path.join(timed_EB_folder,EB)
+
                 print('Running:\n ' + ' '.join(extract_EB_cmd))
                 sp.run(extract_EB_cmd)
         else:
@@ -95,6 +97,7 @@ def find_prune_train(arch = 'BasicCNN2',
                 extract_EB_cmd[-1] = os.path.join(EB_folder,EB)
                 print('Running:\n ' + ' '.join(extract_EB_cmd))
                 sp.run(extract_EB_cmd)
+
 
     # Run main_c.py to train the pruned models to convergence
     print('\nTraining EB\n')
@@ -125,7 +128,7 @@ def find_prune_train(arch = 'BasicCNN2',
             # Get epoch for --start-epoch arg
             for line in open(os.path.join(timed_EB_folder,'EB_epoch.txt')):
                 if line[:2] == EB[3:5]: 
-                    start_epoch = line[-2:-1] 
+                    start_epoch = line[8:-1] 
                     break
             train_EB_cmd[-5] = os.path.join(timed_trained_EB_folder,EB[:5])
             train_EB_cmd[-3] = start_epoch
@@ -139,7 +142,7 @@ def find_prune_train(arch = 'BasicCNN2',
             # Get epoch for --start-epoch arg
             for line in open(os.path.join(EB_folder,'EB_epoch.txt')):
                 if line[:2] == EB[3:5]: 
-                    start_epoch = line[-2:-1] 
+                    start_epoch = line[8:-1] 
                     break
             train_EB_cmd[-5] = os.path.join(trained_EB_folder,EB[:5])
             train_EB_cmd[-3] = start_epoch
@@ -150,9 +153,9 @@ def find_prune_train(arch = 'BasicCNN2',
 # =========================== MAIN LOOP ============================
 
 if __name__ == '__main__':
-    num_of_trials = 2
-    models = ['BasicCNN2']
-    model_depths = [4,16]
+    num_of_trials = 1
+    models = ['vgg']
+    model_depths = [16]
 
     #find_prune_train(arch='vgg', depth=16, timed=True) 
 
@@ -170,7 +173,6 @@ if __name__ == '__main__':
                              depth=model_depths[m],
                              trial_num=t,
                              timed=False)
-
+	
     # TODO: collect all info for table
-
-
+    dict_to_xl(get_data( model_list = ['vgg_16']))

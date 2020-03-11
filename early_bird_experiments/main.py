@@ -418,7 +418,7 @@ class EarlyBird():
         if flag == True:
             #print('dists:', self.dists)
             for i in range(len(self.dists)):
-                if self.dists[i] > 0.1:
+                if self.dists[i] > 0.35:
                     return False
             return True
         else:
@@ -442,7 +442,7 @@ print('layer_times: ',time_per_layer)
 
 from energyreader import *
 time_per_layer = minmaxer(time_per_layer) #alpha n scaled values of time
-
+print('layer_times scaled: ',time_per_layer)
 best_prec1 = 0.
 flag_30 = True
 flag_50 = True
@@ -464,7 +464,7 @@ for epoch in range(args.start_epoch, args.epochs):
             'epoch': epoch + 1,
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
-            'time_ranking': time_per_layer, # 0 or has value, handled by
+            'time_ranking': early_bird_30.time_per_layer, # 0 or has value, handled by
                                             # --timerank
             'optimizer': optimizer.state_dict(),
             }, is_best, 'EB-30', filepath=args.save) # changed 'EB-30-'+str(epoch+1) -> 'EB-30'
@@ -477,7 +477,7 @@ for epoch in range(args.start_epoch, args.epochs):
             'epoch': epoch + 1,
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
-            'time_ranking': time_per_layer, # 0 or has value, handled by
+            'time_ranking': early_bird_50.time_per_layer, # 0 or has value, handled by
                                             # --timerank
             'optimizer': optimizer.state_dict(),
             }, is_best, 'EB-50', filepath=args.save) # changed 'EB-50-'+str(epoch+1) -> 'EB-50'
@@ -490,7 +490,7 @@ for epoch in range(args.start_epoch, args.epochs):
             'epoch': epoch + 1,
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
-            'time_ranking': time_per_layer, # 0 or has value, handled by
+            'time_ranking': early_bird_70.time_per_layer, # 0 or has value, handled by
                                             # --timerank
             'optimizer': optimizer.state_dict(),
             }, is_best, 'EB-70', filepath=args.save) # changed 'EB-70-'+str(epoch+1) -> 'EB-70'

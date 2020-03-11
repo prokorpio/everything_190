@@ -13,7 +13,21 @@ def energyreader(path):
 def minmaxer(line):
     scaledline = list(map(float, line))
     scaledline = torch.as_tensor(scaledline)
+
     #scaledline = scaledline - torch.min(scaledline)
+    #scaledline = scaledline/torch.max(scaledline)
+    #scaledline = scaledline/4
+    #scaledline = scaledline + 0.75
+    #scaledline = scaledline/torch.max(scaledline)
+    #scaledline = scaledline - torch.min(scaledline)
+    #scaledline = torch.exp(scaledline) / torch.exp(scaledline).sum()
+
+    # direct relative percentage (just to maintain normalized proportion)
+    # since apparently, softmax is also magnitude dependent (not just rel mag)
+    # see softmax([1,2]) vs softmax([10,20])
+    #scaledline = scaledline / scaledline.sum()
+
+	# original version of [0,1] but with the limiter in place
+    scaledline = scaledline - torch.min(scaledline)
     scaledline = scaledline/torch.max(scaledline)
-    #scaledline = scaledline + 1 #range is 1 to 2
     return scaledline

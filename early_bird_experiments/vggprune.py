@@ -36,6 +36,10 @@ parser.add_argument('--multi_GPU', type=int, default=0,
 # multi-gpus
 parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
+
+#timeranking
+#parser.add_argument('--timerank', action = 'store_true', default = False,
+#		    		help = 'enables time ranking for pruning if True')
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -74,6 +78,12 @@ if args.model:
             model.load_state_dict(checkpoint['state_dict'])
         # print("=> loaded checkpoint '{}' (epoch {}) Prec1: {:f}"
               # .format(args.model, checkpoint['epoch'], best_prec1))
+    
+
+        time_per_layer = checkpoint['time_ranking']
+
+        print('time_per_layer:', time_per_layer)
+        
     else:
         print("=> no checkpoint found at '{}'".format(args.model))
         exit()
@@ -94,15 +104,22 @@ for m in model.modules():
         total += m.weight.data.shape[0]
 
 bn = torch.zeros(total)
+an = torch.zeros(total)
 index = 0
+layer = 0
 for m in model.modules():
     if isinstance(m, nn.BatchNorm2d):
         size = m.weight.data.shape[0]
         bn[index:(index+size)] = m.weight.data.abs().clone()
+        an[index:(index+size)] = torch.ones((size))*(1-float(time_per_layer[layer]))
         index += size
+        layer += 1
 
 p_flops = 0
-y, i = torch.sort(bn)
+y, i = torch.sort(bn*an)
+#print('bn:',bn)
+#print('an:',an)
+#print('y:', y)
 # comparsion and permutation (sort process)
 p_flops += total * np.log2(total) * 3
 thre_index = int(total * args.percent)
@@ -111,18 +128,34 @@ thre = y[thre_index]
 pruned = 0
 cfg = []
 cfg_mask = []
+layer = 0
+limit_rem = 0.1
+pruning_details = ""
 for k, m in enumerate(model.modules()):
     if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
         weight_copy = m.weight.data.abs().clone()
+
+		#incorporate an
+        weight_copy = weight_copy*(1-float(time_per_layer[layer]))
+
         mask = weight_copy.gt(thre.cuda()).float().cuda()
+
+        #Implement the limiter
+        if mask.sum() < int(limit_rem*weight_copy.shape[0]):
+            print("LIMITER was used on layer",layer)
+            top_ten = torch.topk(weight_copy, int(weight_copy.shape[0]*limit_rem),largest = True)
+            mask[top_ten[1]] = True
         pruned = pruned + mask.shape[0] - torch.sum(mask)
         m.weight.data.mul_(mask)
         m.bias.data.mul_(mask)
         if int(torch.sum(mask)) > 0:
             cfg.append(int(torch.sum(mask)))
         cfg_mask.append(mask.clone())
-        print('layer index: {:d} \t total channel: {:d} \t remaining channel: {:d}'.
+        print('layer index: {:d} \t total channel: {:d} \t remaining channel: {:d} \n'.
             format(k, mask.shape[0], int(torch.sum(mask))))
+        pruning_details = pruning_details + str('layer index: {:d} \t total channel: {:d} \t remaining channel: {:d} \n'.
+            format(k, mask.shape[0], int(torch.sum(mask))))
+        layer += 1
     elif isinstance(m, nn.MaxPool2d):
         cfg.append('M')
 
@@ -275,6 +308,8 @@ model = newmodel
 param = print_model_param_nums(model)
 flops = print_model_param_flops(model.cpu(), 32, True)
 with open(savepath, "w") as fp:
+    fp.write("Details\n" + str(pruning_details))
+    fp.write("time_per_layer:\n"+ str(time_per_layer)+'\n')
     fp.write("new model param: \n"+str(param)+"\n")
     fp.write("new model flops: \n"+str(flops)+"\n")
 print('new model param: ', param)

@@ -112,15 +112,15 @@ for m in model.modules():
     if isinstance(m, nn.BatchNorm2d):
         size = m.weight.data.shape[0]
         bn[index:(index+size)] = m.weight.data.abs().clone()
-        an[index:(index+size)] = torch.ones((size))/float(time_per_layer[layer])
+        an[index:(index+size)] = torch.ones((size))*(1-float(time_per_layer[layer]))
         index += size
         layer += 1
 
 p_flops = 0
 y, i = torch.sort(bn*an)
-print('bn:' , bn)
-print('an:' , an)
-print('y:' , y)
+#print('bn:' , bn)
+#print('an:' , an)
+#print('y:' , y)
 # comparsion and permutation (sort process)
 p_flops += total * np.log2(total) * 3
 thre_index = int(total * args.percent)
@@ -130,12 +130,20 @@ pruned = 0
 cfg = []
 cfg_mask = []
 layer = 0
+limit_rem = 0.1
+pruning_details = ""
 for k, m in enumerate(model.modules()):
     if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
         # TODO: Incorporate alpha in weight_copy
         weight_copy = m.weight.data.abs().clone()
-        weight_copy = weight_copy/float(time_per_layer[layer])
+        weight_copy = weight_copy*(1-float(time_per_layer[layer]))
         mask = weight_copy.gt(thre.cuda()).float().cuda()
+        #Implemetn the limiter
+        if mask.sum() < int(limit_rem*weight_copy.shape[0]):
+            print("LIMITER was used on layer",layer)
+            top_ten = torch.topk(weight_copy, int(weight_copy.shape[0]*limit_rem),largest = True)
+            mask[top_ten[1]] = True
+
         #print('thre', thre)
         #print('weight', weight_copy)
         #print('mask', mask)
@@ -147,6 +155,8 @@ for k, m in enumerate(model.modules()):
         cfg_mask.append(mask.clone()) # append to per layer mask cfg
         print('layer index: {:d} \t total channel: {:d} \t remaining channel: {:d}'.
             format(k, mask.shape[0], int(torch.sum(mask))))
+        pruning_details = pruning_details + str('layer index: {:d} \t total channel: {:d} \t remaining channel: {:d} \n'.
+            format(k, mask.shape[0], int(torch.sum(mask))))        
         layer += 1
     elif isinstance(m, nn.MaxPool2d):
         cfg.append('M')
@@ -307,6 +317,8 @@ model = newmodel
 param = print_model_param_nums(model)
 flops = print_model_param_flops(model.cpu(), 32, True)
 with open(savepath, "w") as fp:
+    fp.write("Details\n" + str(pruning_details))
+    fp.write("time_per_layer:\n"+ str(time_per_layer)+'\n')
     fp.write("new model param: \n"+str(param)+"\n")
     fp.write("new model flops: \n"+str(flops)+"\n")
 print('new model param: ', param)
