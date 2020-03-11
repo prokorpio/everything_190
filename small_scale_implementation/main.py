@@ -18,10 +18,12 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ = 100
+xp_num_ = 3
+#2 is with 200 episodes basline
+#3 is with accuracy only
 if get_log:
     print ("Initializing Experiment", xp_num_, "Writer")
-    writer = SummaryWriter(('runs/experiment_feb8_' + str(xp_num_)))
+    writer = SummaryWriter(('runs_march/experiment_march11_' + str(xp_num_)))
 
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
@@ -116,5 +118,7 @@ if get_log:
     
 
 ##Train the final to compare with the unpruned model
-PATH = os.getcwd() + '/pruned_feb8_' + str(xp_num_) + '.pth'
-torch.save(env.model.state_dict(), PATH)
+PATH = os.getcwd() + '/pruned_march_11_' + str(xp_num_) + '.pth'
+model_dicts = {'state_dict': env.model.state_dict(),
+        'optim': env.optimizer.state_dict()}
+torch.save(model_dicts, PATH)

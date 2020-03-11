@@ -6,7 +6,7 @@ import os
 import copy
 
 import torch
-import torchvision.transforms as tf
+import torchvision.transforms as transforms
 import torchvision.datasets as ds
 import torch.utils.data as data
 from collections import OrderedDict
@@ -32,7 +32,7 @@ class PruningEnv:
 
     def __init__(self, dataset='cifar10', 
                  model_type='basic',
-                 state_size = 516):
+                 state_size = 516+512):
 
         # assign dataset
         self.dataset = dataset
@@ -48,7 +48,10 @@ class PruningEnv:
         #logging.info("Starting Pre-Training")
         # set training parameters
         self.loss_func = nn.CrossEntropyLoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr = 0.0008)
+        #self.optimizer = optim.Adam(self.model.parameters(), lr = 0.0008)
+        self.optimizer = optim.SGD(self.model.parameters(), lr = 0.1, momentum=0.9, weight_decay=1e-4)
+
+        #self.optimizer = optim.SGD(self.model.parameters(), lr = 0.1
         #self._train_model(num_epochs=1)
         #self.init_full_weights = copy.deepcopy(self.model.state_dict()) 
                                     # initially, self.model has full-params
@@ -76,18 +79,36 @@ class PruningEnv:
 
         if self.dataset.lower() == 'cifar10':
             # copied from marcus' rat5, lines 17:29
-            cifar10_trans = tf.Compose([tf.ToTensor(),
-                                        tf.Normalize((0.5,0.5,0.5),
+            cifar10_trans = transforms.Compose([transforms.ToTensor(),
+                                        transforms.Normalize((0.5,0.5,0.5),
                                                      (0.5,0.5,0.5))])
-
+            train_transform = transform=transforms.Compose([
+                           transforms.Pad(4),
+                           transforms.RandomCrop(32),
+                           transforms.RandomHorizontalFlip(),
+                           # transforms.Lambda(lambda x: filters.gaussian_filter(x, args.sigma) if args.filter == 'lowpass' else x),
+                           # transforms.Lambda(lambda x: my_gaussian_filter_2(x, 1/args.sigma, args.filter) if args.filter == 'highpass' else x),
+                           transforms.ToTensor(),
+                           # transforms.Lambda(lambda x: torch.where(x > args.sparsity_gt, x, torch.zeros_like(x)) if args.sparsity_gt > 0 else x),
+                           transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+                       ])
+            
+            test_transform = transform=transforms.Compose([
+                           # transforms.Lambda(lambda x: filters.gaussian_filter(x, args.sigma) if args.filter == 'lowpass' else x),
+                           # transforms.Lambda(lambda x: my_gaussian_filter_2(x, 1/args.sigma, args.filter) if args.filter == 'highpass' else x),
+                           transforms.ToTensor(),
+                           # transforms.Lambda(lambda x: torch.where(x > args.sparsity_gt, x, torch.zeros_like(x)) if args.sparsity_gt > 0 else x),
+                           transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+                       ])
+            
             train = ds.CIFAR10(root = os.getcwd(),
                                train = True,
                                download = True,
                                transform = cifar10_trans)
 
             train_loader = data.DataLoader(train,
-                                           batch_size = 64,
-                                           shuffle = True,
+                                           batch_size = 256,
+                                           shuffle = False,
                                            num_workers = 0)
             
             test = ds.CIFAR10(root = os.getcwd(),
@@ -96,7 +117,7 @@ class PruningEnv:
                               transform = cifar10_trans)
             
             test_loader = data.DataLoader(test,
-                                          batch_size = 64, # testing use less 
+                                          batch_size = 256, # testing use less 
                                                            # memory, can afford 
                                                            # larger batch_size
                                           shuffle = False,
@@ -181,7 +202,7 @@ class PruningEnv:
 
         return reduced_layer_flops, current_layer_flops, rest_layer_flops
 
-    def get_state(self, include_grads=False,
+    def get_state(self, include_grads=True,
                         include_flops=True): 
         ''' Gets the layer/state '''
         
@@ -220,7 +241,7 @@ class PruningEnv:
         # State element 3
         if include_grads: 
             loss_func = nn.CrossEntropyLoss()
-            optimizer = optim.Adam(self.model.parameters(0.0008))
+            optimizer = optim.SGD(self.model.parameters(), lr = 0.1, momentum=0.9, weight_decay=1e-4)
 
             #Fake train. To obtain gradients
             for idx, train_data in enumerate(self.train_dl):
@@ -239,10 +260,13 @@ class PruningEnv:
                     loss.backward()  # compute grads
                     for key, var in self.model.named_parameters():
                         if key == self.layer + '.weight':
+                            grads = torch.abs(var.grad.clone())
                             pooled_grad = torch.squeeze(F.avg_pool2d(var.grad,
                                                         var.grad.size()[-1]))
                             pooled_grad = pooled_grad*1000
                             grad_rep = pooled_grad.mean(axis = 1)
+                            grad_rep -= grad_rep.min()
+                            grad_rep /= grad_rep.max()
                             break
                     break
 
@@ -280,7 +304,6 @@ class PruningEnv:
                 # forward
                 preds = self.model(inputs) # forward pass
                 loss = loss_func(preds,labels) # compute loss
-
                 # backward
                 loss.backward()  # compute grads
                 for key, var in self.model.named_parameters():
@@ -314,17 +337,16 @@ class PruningEnv:
                 # forward
                 preds = self.model(inputs) # forward pass
                 loss = self.loss_func(preds,labels) # compute loss
-                
+                # print("Loss", loss)
                 # backward
                 loss.backward()  # compute grads
-                
+
                 self.optimizer.step() # update params w/ Adam update rule
 
                 # print accuracy
                 _, prediction = torch.max(preds, dim=1) # idx w/ max val is
                                                         # most confident class
                 train_acc.append((prediction==labels).type(torch.double).mean())
-
                 if (idx+1) % 2 == 0:
                     elapsed_time = time.time() - start_time
                     str_time = time.strftime("%H:%M:%S", 
@@ -336,7 +358,6 @@ class PruningEnv:
                                    # loss.item(), train_acc[-1], 
                                    # str_time))
         logging.info('Training Done')
-
     def _evaluate_model(self):
         ''' Helper tool for _calculate_reward(),
             evaluates the model being pruned'''
@@ -345,7 +366,7 @@ class PruningEnv:
         logging.info('Evaluating CNN model''')
         total = 0 # total number of labels
         correct = 0 # total correct preds
-
+        
         with torch.no_grad():
             for test_data in self.test_dl:
                 inputs, labels = test_data
@@ -359,9 +380,8 @@ class PruningEnv:
                 total += labels.size(0) # number of rows = num of samples
                 correct += (prediction == labels).sum().item() 
 
-        val_acc = correct/total
-        
-        return val_acc
+        val_acc = float(correct/total)
+        return val_acc#, correct, total
                 
     def _calculate_reward(self): 
         ''' Performs the ops to get reward 
@@ -384,7 +404,7 @@ class PruningEnv:
         #amount_pruned = amount_pruned.type(torch.float)
         #total_filters = torch.tensor(total_filters, dtype = torch.float)
         #reward = -(1-acc)*(flops_ratio) 
-        reward = -(1-acc)*np.log(flops_remain)#*(total_filters/amount_pruned)#np.log(flops)
+        reward = -(1-acc)#*np.log(flops_remain)#*(total_filters/amount_pruned)#np.log(flops)
         logging.info("%Layer Flops: {}".format(flops_ratio))
         logging.info("Reward: {}".format(reward))
 
@@ -654,7 +674,9 @@ class PruningEnv:
         #                                        '/partially_trained_3.pt',
         #                                        map_location = self.device))
         self.model.load_state_dict(torch.load(os.getcwd() + \
-                                                '/partially_trained_3_v2.pth'))
+                                                '/sgd_90_5th_epoch_v2.pth')['state_dict'])
+        self.optimizer.load_state_dict(torch.load(os.getcwd() + \
+                                    '/sgd_90_5th_epoch_v2.pth')['optim'])
         # initialize starting layer to process
         self.layer = self.layers_to_prune[0]
         # initialize prune amounts to zer
