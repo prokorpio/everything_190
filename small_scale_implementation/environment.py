@@ -32,7 +32,7 @@ class PruningEnv:
 
     def __init__(self, dataset='cifar10', 
                  model_type='basic',
-                 state_size = 516+512):
+                 state_size = 516):
 
         # assign dataset
         self.dataset = dataset
@@ -58,8 +58,9 @@ class PruningEnv:
                                     # used in reset_to_k()
 
         # state
-        self.layers_to_prune = [name for name,_ in self.model.named_modules() 
-                                if 'conv' in name]
+        #self.layers_to_prune = [name for name,_ in self.model.named_modules() 
+        #                        if 'conv' in name]
+        self.layers_to_prune = ['conv3','conv4']
         logging.info(self.layers_to_prune)
         self.layer = None # Layer to process, 
                                      # str name, is usr-identified 
@@ -109,7 +110,7 @@ class PruningEnv:
             train_loader = data.DataLoader(train,
                                            batch_size = 256,
                                            shuffle = False,
-                                           num_workers = 0)
+                                           num_workers = 0, pin_memory = True)
             
             test = ds.CIFAR10(root = os.getcwd(),
                               train = False,
@@ -121,7 +122,7 @@ class PruningEnv:
                                                            # memory, can afford 
                                                            # larger batch_size
                                           shuffle = False,
-                                          num_workers = 0)
+                                          num_workers = 0, pin_memory = True)
 
             return train_loader, test_loader
                               
@@ -202,7 +203,7 @@ class PruningEnv:
 
         return reduced_layer_flops, current_layer_flops, rest_layer_flops
 
-    def get_state(self, include_grads=True,
+    def get_state(self, include_grads=False,
                         include_flops=True): 
         ''' Gets the layer/state '''
         
@@ -383,7 +384,7 @@ class PruningEnv:
         val_acc = float(correct/total)
         return val_acc#, correct, total
                 
-    def _calculate_reward(self): 
+    def _calculate_reward(self, total_filters, amount_pruned): 
         ''' Performs the ops to get reward 
             of action of current layer'''
 
@@ -404,9 +405,10 @@ class PruningEnv:
         #amount_pruned = amount_pruned.type(torch.float)
         #total_filters = torch.tensor(total_filters, dtype = torch.float)
         #reward = -(1-acc)*(flops_ratio) 
-        reward = -(1-acc)#*np.log(flops_remain)#*(total_filters/amount_pruned)#np.log(flops)
+        reward = -float(amount_pruned)#np.log(flops_remain)#*(total_filters/amount_pruned)#np.log(flops)
         logging.info("%Layer Flops: {}".format(flops_ratio))
         logging.info("Reward: {}".format(reward))
+        logging.info("Flops Remain: {}".format(np.log(flops_remain)))
 
         return reward, acc, flops_orig, flops_ratio
     

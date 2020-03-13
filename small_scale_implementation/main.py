@@ -18,17 +18,31 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ = 3
+xp_num_ = 6
+#1 march 13 is with amount pruned to be increased (works as intended)
+#2 is with amount pruned to be decreased
+#3 is still amount to be decreased  but wt threshold set to 0.5
+#4 threshold at 0.5 and -amount_pruned as reward same with [5,
+
 #2 is with 200 episodes basline
 #3 is with accuracy only
+#4 is with 485
+#5 is with 485 and 1 epoch of training
+#6 is idk
+#7 is with inverted reward and 0.49
+#8 is with (3+acc) reward
+#9 is with (3+acc)*np.log(flops_remain) and 0.49
+#10 is same as 9 but without the grads in state rep
+#11 is (3+acc)*(total/amount pruned) without grads in state rep
+#12 is with the inverse of 11 since 11 forces amount prund to go up
 if get_log:
     print ("Initializing Experiment", xp_num_, "Writer")
-    writer = SummaryWriter(('runs_march/experiment_march11_' + str(xp_num_)))
+    writer = SummaryWriter(('runs_march/experiment_march13_' + str(xp_num_)))
 
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
 agent = REINFORCE_agent(env.state_size, action_size=512)
-M = 200# no reason, number of training episodes
+M = 500# no reason, number of training episodes
 
 # Define RandSubnet, for benchmarking
 rand_compare = False 
@@ -73,7 +87,7 @@ for episode in range(M):
 
         # get reward
         logging.info("Calculating reward")
-        reward,acc,flop,flops_ratio = env._calculate_reward()
+        reward,acc,flop,flops_ratio = env._calculate_reward(total_filters, amount_pruned)
         action_reward_buffer.append((action, reward))
         
         # Log info's
@@ -81,7 +95,7 @@ for episode in range(M):
             flops_ratio_accumulated += flops_ratio #remaining per layer
             total_reward += reward 
             amount_pruned_accum += amount_pruned
-            if (xp_num == 3):
+            if (xp_num == 1):
                 total_flops_ratio = flops_ratio_accumulated/4
                 #total_xps = episode*len(layers_to_prune) + xp_num
                 writer.add_scalar('Accuracy_vs_Episode', acc, episode)
