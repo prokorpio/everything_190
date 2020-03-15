@@ -32,7 +32,7 @@ class PruningEnv:
 
     def __init__(self, dataset='cifar10', 
                  model_type='basic',
-                 state_size = 516):
+                 state_size = 513):
 
         # assign dataset
         self.dataset = dataset
@@ -60,7 +60,7 @@ class PruningEnv:
         # state
         #self.layers_to_prune = [name for name,_ in self.model.named_modules() 
         #                        if 'conv' in name]
-        self.layers_to_prune = ['conv3','conv4']
+        self.layers_to_prune = ['conv4']
         logging.info(self.layers_to_prune)
         self.layer = None # Layer to process, 
                                      # str name, is usr-identified 
@@ -204,7 +204,7 @@ class PruningEnv:
         return reduced_layer_flops, current_layer_flops, rest_layer_flops
 
     def get_state(self, include_grads=False,
-                        include_flops=True): 
+                        include_flops=False): 
         ''' Gets the layer/state '''
         
         # get conv layer 
@@ -399,16 +399,23 @@ class PruningEnv:
         # get flops 
         flops_orig, flops_remain = self._estimate_layer_flops()
         self.layer_flops[self.layer] = flops_remain
-
+        
+        #temporary delete after single layer experiments
+        flops_remain = 1
+        flops_orig = 1
+        
+        
         flops_ratio = float(float(flops_remain) / float(flops_orig))
         # get reward as func of acc and flops
         #amount_pruned = amount_pruned.type(torch.float)
         #total_filters = torch.tensor(total_filters, dtype = torch.float)
         #reward = -(1-acc)*(flops_ratio) 
-        reward = -float(amount_pruned)#np.log(flops_remain)#*(total_filters/amount_pruned)#np.log(flops)
+        #reward = -(1-acc) + 42e-4*amount_pruned#np.log(flops_remain)#*(total_filters/amount_pruned)#np.log(flops)
+        reward = -(1-acc)# + (np.log(total_filters/amount_pruned))
         logging.info("%Layer Flops: {}".format(flops_ratio))
         logging.info("Reward: {}".format(reward))
         logging.info("Flops Remain: {}".format(np.log(flops_remain)))
+        logging.info("Amount_pruned: {}".format(amount_pruned))
 
         return reward, acc, flops_orig, flops_ratio
     

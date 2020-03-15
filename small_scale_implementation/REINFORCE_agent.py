@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO,
 class REINFORCE_agent():
     """ add description """
 
-    def __init__(self, state_size, action_size, gamma=0.99, lr=8e-5):
+    def __init__(self, state_size, action_size, gamma=0.99, lr=1e-3):
         
         self.state_size= state_size
         self.action_size = action_size
@@ -60,28 +60,45 @@ class REINFORCE_agent():
     def update_policy(self, episode_rewards, actions):
 
         # Compute Return function for each experience in the episode
+        # print("episode_rewards", episode_rewards)
+        # print("actions", actions)
         returns = np.zeros_like(episode_rewards)
         Gt = 0.0
         for t in reversed(range(len(episode_rewards))): # t is timestep
             Gt = episode_rewards[t] + self.gamma*Gt     # Return function Gt
             returns[t] = Gt                             # Return per time step     
 
+        # print("prestandardreturns", returns)
         returns = torch.tensor(returns) 
-        returns = (returns - returns.mean())/(returns.std() + 1e-9)
+        #returns = (returns - returns.mean())/(returns.std() + 1e-9)
                              # standardized to control variance of Return
 
         expanded_returns = torch.zeros(len(returns), self.action_size)
-        #print("actions", actions)
+        # print("returns", returns)
+        # print("GT", Gt)
         for i, Gt in enumerate(returns):
             # mult Gt only on activated channels
             expanded_returns[i, np.where(actions[i] >  0.5)[0]] = \
                                                     Gt.type(torch.float)
 
+        # print("expanded_returns", expanded_returns)
+        expanded_returns[0,np.where(actions > 0.5)] = returns
+        expanded_returns[0,np.where(actions <= 0.5)] = returns
+        print(len(np.where(actions>0.5)[0]), "Shape of np.where")
+        
         # Compute gradients, 
         #logging.info("Expanded returns[0]: {}".format(expanded_returns[0]))
-        actions = torch.log(torch.transpose(actions,0,1))
+
+        try:
+            actions = torch.transpose(actions,0,1)
+        except IndexError:
+            print("No need to transpose")
+        #actions = torch.log(actions)
+        # print("actions", actions)
         #logging.info("Actions:\n{}".format(actions))
+        # print("Actions", actions)
         Jt = expanded_returns.matmul(actions) 
+        print("Jt", Jt)
         #logging.info("Jt:\n{}".format(Jt))
         #Jt = [] # will summands of objective function
         #for log_prob, Gt in zip(log_probs, returns):
@@ -89,6 +106,9 @@ class REINFORCE_agent():
          
         self.policy.Adamizer.zero_grad() # reset weight update grads to zero
         objective_func = Jt.sum()
+        print("objective_func", objective_func)
+        print("episode_rewards", episode_rewards)
+ 
         #objective_func = torch.stack(Jt).sum()  
         # stack will concat multiple 1x1 tensors
         # to single vector tensor, then sum elements

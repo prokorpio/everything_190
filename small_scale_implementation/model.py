@@ -12,7 +12,7 @@ class PolicyNetwork(nn.Module):
         self.fc2 = nn.Linear(128, 64)
         self.fc3 = nn.Linear(64,action_size)
         
-        self.Adamizer = optim.Adam(self.parameters(),lr=lr)
+        self.Adamizer = optim.SGD(self.parameters(),lr=lr)
     
     def forward(self,input_state):
         x = F.relu(self.fc1(input_state))

@@ -18,7 +18,11 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ = 6
+xp_num_ = 10
+
+
+
+#15 is with log of total/pruned
 #1 march 13 is with amount pruned to be increased (works as intended)
 #2 is with amount pruned to be decreased
 #3 is still amount to be decreased  but wt threshold set to 0.5
@@ -37,12 +41,12 @@ xp_num_ = 6
 #12 is with the inverse of 11 since 11 forces amount prund to go up
 if get_log:
     print ("Initializing Experiment", xp_num_, "Writer")
-    writer = SummaryWriter(('runs_march/experiment_march13_' + str(xp_num_)))
+    writer = SummaryWriter(('runs_march15/experiment_' + str(xp_num_)))
 
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
 agent = REINFORCE_agent(env.state_size, action_size=512)
-M = 500# no reason, number of training episodes
+M = 600# no reason, number of training episodes
 
 # Define RandSubnet, for benchmarking
 rand_compare = False 
@@ -77,8 +81,30 @@ for episode in range(M):
         # get action
         action = agent.get_action(state)
         action = torch.unsqueeze(action, 0)
-        action_to_index = (action > 0.5).type(torch.int)
-
+        
+        #Bins the action
+        # action_to_index = (action > 0.5).type(torch.int)
+        
+        #Uses a set ratio
+        ratio_prune = 0.5
+        tempmask = torch.ones(action.shape[1])
+        mag_rank = torch.topk(action,int(action.shape[1]*ratio_prune),largest = False)
+        tempmask[mag_rank[1]] = 0
+        print(tempmask.sum())
+        # print(mag_rank)
+        # print(tempmask)
+        # print(action)
+        action_to_index = torch.unsqueeze(tempmask,0)
+        # print(action_to_index)
+        print(action_to_index.sum())
+        try:
+            if (prev_action_to_index == action_to_index).all():
+                print("Similar mask as before")
+            else:
+                print("Different masks")
+        except:
+            print("no previous mask yet")
+        prev_action_to_index = action_to_index
         # perform action 
         total_filters, amount_pruned = env.prune_layer(action_to_index)
         if rand_compare:
@@ -95,12 +121,12 @@ for episode in range(M):
             flops_ratio_accumulated += flops_ratio #remaining per layer
             total_reward += reward 
             amount_pruned_accum += amount_pruned
-            if (xp_num == 1):
+            if (xp_num == 0):
                 total_flops_ratio = flops_ratio_accumulated/4
                 #total_xps = episode*len(layers_to_prune) + xp_num
                 writer.add_scalar('Accuracy_vs_Episode', acc, episode)
-                writer.add_scalar('Pruned_Flops_Ratio_vs_Episode', 
-                                  total_flops_ratio, episode)
+                # writer.add_scalar('Pruned_Flops_Ratio_vs_Episode', 
+                                  # total_flops_ratio, episode)
                 writer.add_scalar('Amount_Pruned_vs_Episode',
                                   amount_pruned_accum, episode)
                 writer.add_scalar('Reward_vs_Episode', 
@@ -123,6 +149,8 @@ for episode in range(M):
     # actions: tuple->tensor
     actions = torch.squeeze(torch.stack(actions)).type(torch.float)
     agent.update_policy(rewards, actions) 
+    print("amount_pruned", amount_pruned)
+    print("acc", acc)
 
 if get_log:
     writer.close()
@@ -132,7 +160,7 @@ if get_log:
     
 
 ##Train the final to compare with the unpruned model
-PATH = os.getcwd() + '/pruned_march_11_' + str(xp_num_) + '.pth'
+PATH = os.getcwd() + '/pruned_march_15_' + str(xp_num_) + '.pth'
 model_dicts = {'state_dict': env.model.state_dict(),
         'optim': env.optimizer.state_dict()}
 torch.save(model_dicts, PATH)
