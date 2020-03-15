@@ -82,8 +82,8 @@ class REINFORCE_agent():
                                                     Gt.type(torch.float)
 
         # print("expanded_returns", expanded_returns)
-        expanded_returns[0,np.where(actions > 0.5)] = returns
-        expanded_returns[0,np.where(actions <= 0.5)] = returns
+        expanded_returns[0,np.where(actions > 0.5)] = float(returns)
+        expanded_returns[0,np.where(actions <= 0.5)] = float(returns)
         print(len(np.where(actions>0.5)[0]), "Shape of np.where")
         
         # Compute gradients, 

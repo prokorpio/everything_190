@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ = 10
+xp_num_ = 19
 
 
 
