@@ -32,7 +32,7 @@ class PruningEnv:
 
     def __init__(self, dataset='cifar10', 
                  model_type='basic',
-                 state_size = 513):
+                 state_size = 960):
 
         # assign dataset
         self.dataset = dataset
@@ -60,7 +60,7 @@ class PruningEnv:
         # state
         #self.layers_to_prune = [name for name,_ in self.model.named_modules() 
         #                        if 'conv' in name]
-        self.layers_to_prune = ['conv4']
+        self.layers_to_prune = ['conv1','conv2','conv3','conv4']
         logging.info(self.layers_to_prune)
         self.layer = None # Layer to process, 
                                      # str name, is usr-identified 
@@ -288,6 +288,38 @@ class PruningEnv:
             state_rep = torch.cat((state_rep,reduced,current,rest),0)
 
 
+        return state_rep
+        
+    def get_global_state_rep(self):
+        print("hello")
+        i = 0
+        #Go to all the layers
+        for layer in self.layers_to_prune:
+        
+            #Get the weights of each layer
+            for name, param in self.model.named_parameters():
+                if layer in name and 'weight' in name:
+                    # State element 2
+                    # copy params
+                    filter_weights = torch.abs(param.data.clone())
+                    #TODO: what about the bias tensor ?
+                    pooled_weights = torch.squeeze(F.avg_pool2d(filter_weights,
+                                                               filter_weights.size()[-1]))
+                    
+                    pooled_weights_mean = pooled_weights.mean(axis = 1)
+                    pooled_weights_mean -= pooled_weights_mean.min()
+                    pooled_weights_mean /= pooled_weights_mean.max() # squish to [0,1]
+
+                    # Concat two core elements
+                    try:
+                        state_rep = torch.cat((state_rep,pooled_weights_mean),0)
+                        print("Concatting")
+                    except:
+                        state_rep = pooled_weights_mean
+                        print("staterep dne yet")
+                                # addn'ls to be concat thru ff conditions
+            print(state_rep.shape)
+        print(state_rep.shape)       
         return state_rep
     def get_grads(self):
         loss_func = nn.CrossEntropyLoss()
