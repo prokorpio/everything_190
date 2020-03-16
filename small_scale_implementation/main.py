@@ -18,7 +18,8 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ = 19
+xp_num_ = 18
+
 
 
 
@@ -41,7 +42,7 @@ xp_num_ = 19
 #12 is with the inverse of 11 since 11 forces amount prund to go up
 if get_log:
     print ("Initializing Experiment", xp_num_, "Writer")
-    writer = SummaryWriter(('runs_march15/experiment_' + str(xp_num_)))
+    writer = SummaryWriter(('runs_march16/experiment_' + str(xp_num_)))
 
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
@@ -86,7 +87,7 @@ for episode in range(M):
         # action_to_index = (action > 0.5).type(torch.int)
         
         #Uses a set ratio
-        ratio_prune = 0.5
+        ratio_prune = 0.6
         tempmask = torch.ones(action.shape[1])
         mag_rank = torch.topk(action,int(action.shape[1]*ratio_prune),largest = False)
         tempmask[mag_rank[1]] = 0
