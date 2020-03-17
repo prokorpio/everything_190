@@ -18,12 +18,15 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ =100
+xp_num_ =14
 
+
+
+M =20# no reason, number of training episodes
 
 if get_log:
     print ("Initializing Experiment", xp_num_, "Writer")
-    writer = SummaryWriter(('runs_march16_global/experiment_' + str(xp_num_)))
+    writer = SummaryWriter(('runs_march17_global/experiment_' + str(xp_num_)))
 
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
@@ -91,10 +94,6 @@ print(action.shape[0])
 
 
 
-
-
-M =250# no reason, number of training episodes
-
 # Define RandSubnet, for benchmarking
 
 start_time = time.time()
@@ -124,41 +123,49 @@ for episode in range(M):
     
     ##inspect each layer's mask and unprune if needed
     idx = 0
+    
+    print(env._evaluate_model())
     for i in range(len(size_of_layer)):
-
+        
+        #choose the layer
+        env.layer = env.layers_to_prune[i]
         #Get current action for the layer as well as the mask
-        layer_action  = action[idx:idx+size_of_layer[i]]
+        layer_action  = global_tempmask[idx:idx+size_of_layer[i]].clone()
+        layer_values = action[idx:idx+size_of_layer[i]].clone()
         layer_pruned = global_tempmask[idx:idx+size_of_layer[i]].sum()
         
         
 
-        print("layer_pruned",layer_pruned)
+        print("Proposed_layer_kept",layer_pruned)
         if layer_pruned < int(limit_rem * size_of_layer[i]):
-            unprune = torch.topk(layer_action,int(limit_rem*size_of_layer[1]),largest = True)
+            unprune = torch.topk(layer_values,int(limit_rem*size_of_layer[1]),largest = True)
             layer_action[unprune[1]] = True
             global_tempmask[idx:idx+size_of_layer[i]] = layer_action
-            print("unpruned" ,size_of_layer[i])
+
         else:
-            print("kept as pruned", size_of_layer[i])
+            pass
             
+
+        print("Amount kept is", global_tempmask[idx:idx+size_of_layer[i]].sum())
+        layer_action = torch.unsqueeze(global_tempmask[idx:idx+size_of_layer[i]],0)    
+        filters_counted, pruned_counted = env.prune_layer(layer_action)           
         idx += size_of_layer[i]
     
     
     idx = 0
     print(env._evaluate_model())
-    for i in range(len(size_of_layer)):
-        env.layer = env.layers_to_prune[i]
-        print("Pruning", env.layers_to_prune[i])
-        print("Amount pruned is", global_tempmask[idx:idx+size_of_layer[i]].sum())
-        layer_action = torch.unsqueeze(global_tempmask[idx:idx+size_of_layer[i]],0)
-        env.prune_layer(layer_action)
+    # for i in range(len(size_of_layer)):
+        # env.layer = env.layers_to_prune[i]
+        # print("Pruning", env.layers_to_prune[i])
+        # print("Amount pruned is", global_tempmask[idx:idx+size_of_layer[i]].sum())
+        # layer_action = torch.unsqueeze(global_tempmask[idx:idx+size_of_layer[i]],0)
+
 
     
-    print(env._evaluate_model())
-    amount_pruned = global_tempmask.sum()
+    amount_pruned = 960-global_tempmask.sum()
     reward,acc,flop,flops_ratio = env._calculate_reward(total_filters_count, amount_pruned)
     action_reward_buffer.append((action, reward))
-        
+
     # Log info's
     if get_log:
         flops_ratio_accumulated += flops_ratio #remaining per layer

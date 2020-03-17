@@ -291,8 +291,6 @@ class PruningEnv:
         return state_rep
         
     def get_global_state_rep(self):
-        print("hello")
-        i = 0
         #Go to all the layers
         for layer in self.layers_to_prune:
         
@@ -318,8 +316,6 @@ class PruningEnv:
                         state_rep = pooled_weights_mean
                         print("staterep dne yet")
                                 # addn'ls to be concat thru ff conditions
-            print(state_rep.shape)
-        print(state_rep.shape)       
         return state_rep
     def get_grads(self):
         loss_func = nn.CrossEntropyLoss()
@@ -444,9 +440,9 @@ class PruningEnv:
         #reward = -(1-acc)*(flops_ratio) 
         #reward = -(1-acc) + 42e-4*amount_pruned#np.log(flops_remain)#*(total_filters/amount_pruned)#np.log(flops)
         reward = -(1-acc)# + (np.log(total_filters/amount_pruned))
-        logging.info("%Layer Flops: {}".format(flops_ratio))
+        # logging.info("%Layer Flops: {}".format(flops_ratio))
         logging.info("Reward: {}".format(reward))
-        logging.info("Flops Remain: {}".format(np.log(flops_remain)))
+        # logging.info("Flops Remain: {}".format(np.log(flops_remain)))
         logging.info("Amount_pruned: {}".format(amount_pruned))
 
         return reward, acc, flops_orig, flops_ratio
@@ -621,7 +617,6 @@ class PruningEnv:
                 conv_layer = module
                 _, next_conv_layer = next(named_children)
                 break
-
         #iterate through all the parameters of the network
         for layer in self.model.children():
             #hardcode to find the last conv layer
@@ -672,6 +667,7 @@ class PruningEnv:
                             # get prune amount to return to caller
                             amt_pruned = (size[0] -
                                           indices[0,:size[0]].sum()).item()
+                            
                             total_filters = size[0]
 
                             # update env pruning record
