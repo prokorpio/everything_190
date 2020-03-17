@@ -18,11 +18,11 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ =14
+xp_num_ = 6
 
 
 
-M =20# no reason, number of training episodes
+M = 150# no reason, number of training episodes
 
 if get_log:
     print ("Initializing Experiment", xp_num_, "Writer")
