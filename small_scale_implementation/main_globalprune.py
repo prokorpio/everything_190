@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ =12
+xp_num_ =100
 
 
 if get_log:
@@ -149,6 +149,7 @@ for episode in range(M):
     for i in range(len(size_of_layer)):
         env.layer = env.layers_to_prune[i]
         print("Pruning", env.layers_to_prune[i])
+        print("Amount pruned is", global_tempmask[idx:idx+size_of_layer[i]].sum())
         layer_action = torch.unsqueeze(global_tempmask[idx:idx+size_of_layer[i]],0)
         env.prune_layer(layer_action)
 
