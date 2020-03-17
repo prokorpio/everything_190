@@ -18,12 +18,12 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ = 5
+xp_num_ =12
 
 
 if get_log:
     print ("Initializing Experiment", xp_num_, "Writer")
-    writer = SummaryWriter(('runs_march16/experiment_' + str(xp_num_)))
+    writer = SummaryWriter(('runs_march16_global/experiment_' + str(xp_num_)))
 
 # Define Agent, Training Env, & HyperParams
 env = PruningEnv()
@@ -93,7 +93,7 @@ print(action.shape[0])
 
 
 
-M = 150# no reason, number of training episodes
+M =250# no reason, number of training episodes
 
 # Define RandSubnet, for benchmarking
 
