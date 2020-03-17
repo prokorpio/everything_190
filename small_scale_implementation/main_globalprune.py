@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ = 6
+xp_num_ = 23
 
 
 
@@ -47,7 +47,7 @@ print("Neural network has a total of" , total_filters_count)
 print(size_of_layer, len(size_of_layer))
 action = torch.rand(total_filters_count)
 print(action.shape,"shape")
-ratio_prune = 0.5
+ratio_prune = 0.3
 limit_rem = 0.05
 action_per_layer = []
 idx = 0
@@ -110,7 +110,12 @@ for episode in range(M):
     amount_pruned_accum = 0
     total_reward = 0
     
-    
+    if episode == 60:
+        for param_group in agent.policy.Adamizer.param_groups:
+            param_group['lr'] *= 0.25
+    if episode == 120:
+        for param_group in agent.policy.Adamizer.param_groups:
+            param_group['lr'] *= 0.25       
     state_rep = env.get_global_state_rep()
     state_rep = state_rep.cpu()
     action = agent.get_action(state_rep)
@@ -201,7 +206,7 @@ if get_log:
     
 
 ##Train the final to compare with the unpruned model
-PATH = os.getcwd() + '/pruned_march_15_' + str(xp_num_) + '.pth'
+PATH = os.getcwd() + '/pruned_march_17_global' + str(xp_num_) + '.pth'
 model_dicts = {'state_dict': env.model.state_dict(),
         'optim': env.optimizer.state_dict()}
 torch.save(model_dicts, PATH)
