@@ -39,6 +39,7 @@ class RandSubnet():
         if self.model_type.lower() == 'basic' :
             self.model = models_to_prune.RandBasicCNN(self.filter_counts)
             self.model = self.model.to(self.device)
+            self.optimizer = optimizer = optim.SGD(self.model.parameters(), lr = 0.1, momentum=0.9, weight_decay=1e-4)
         else:
             print('model not available') #TODO: use proper handling
             return -1
@@ -48,7 +49,6 @@ class RandSubnet():
         # set training parameters 
         #TODO: make this an input, to be set same to env's
         loss_func = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(self.model.parameters(0.0008))
 
         self.model.train()
 
@@ -61,7 +61,7 @@ class RandSubnet():
                 inputs = inputs.to(self.device)
                 labels = labels.to(self.device)
                 
-                optimizer.zero_grad()
+                self.optimizer.zero_grad()
 
                 # forward
                 preds = self.model(inputs) # forward pass
@@ -70,7 +70,7 @@ class RandSubnet():
                 # backward
                 loss.backward()  # compute grads
                 
-                optimizer.step() # update params w/ Adam update rule
+                self.optimizer.step() # update params w/ Adam update rule
 
                 # print accuracy
                 _, prediction = torch.max(preds, dim=1) # idx w/ max val is
@@ -109,7 +109,7 @@ class RandSubnet():
 
         val_acc = float(correct/total)
         
-        return val_acc, correct, total
+        return val_acc
 
 def extract_feature_map_sizes(model, input_data_shape, device = None):
     ''' Hook to get conv and fc layerwise feat map sizes
