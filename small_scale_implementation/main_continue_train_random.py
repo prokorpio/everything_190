@@ -14,8 +14,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 # Basemark is 5381
-trialnum = 1
-writer = SummaryWriter(('runs_march17_continue/rand_march_17_global23_'+str(trailnum)))
+trialnum = 2
+writer = SummaryWriter(('runs_march17_continue/rand_march_17_global61_'+str(trialnum)))
 
 env = PruningEnv()
 env.reset_to_k()
@@ -30,7 +30,7 @@ for name, param in env.model.named_parameters():
         print(param.shape[0])
         size_of_layer.append(param.shape[0])
         
-ratio_prune = 0.3
+ratio_prune = 0.6
 limit_rem = 0.05
 random_mask = torch.rand((960))
 global_randmask = torch.ones((960))
@@ -76,7 +76,7 @@ val_acc = env._evaluate_model()
 print(val_acc)
 
 for n_iter in range(85):
-    if epoch in ([25,55]):
+    if n_iter in ([25,55]):
         for param_group in env.optimizer.param_groups:
             param_group['lr'] *= 0.1
     print("EPOCH",n_iter)
@@ -92,7 +92,7 @@ val_acc = env._evaluate_model()
 print(val_acc)
 
 ##Train the final to compare with the unpruned model
-PATH = os.getcwd() + '/rand_march_17_global_trained_23_'+str(trialnum)+'.pth'
+PATH = os.getcwd() + '/rand_march_17_global_trained_61_'+str(trialnum)+'.pth'
 model_dicts = {'state_dict': env.model.state_dict(),
         'optim': env.optimizer.state_dict()}
 torch.save(model_dicts, PATH)

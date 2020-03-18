@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ = 23
+xp_num_ = 62
 
 
 
@@ -47,7 +47,7 @@ print("Neural network has a total of" , total_filters_count)
 print(size_of_layer, len(size_of_layer))
 action = torch.rand(total_filters_count)
 print(action.shape,"shape")
-ratio_prune = 0.3
+ratio_prune = 0.60
 limit_rem = 0.05
 action_per_layer = []
 idx = 0

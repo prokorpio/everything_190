@@ -17,20 +17,20 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 trialnum = 1
-writer = SummaryWriter(('runs_march17_continue/pruned_march_17_global23_'+str(trailnum)))
+writer = SummaryWriter(('runs_march17_continue/pruned_march_17_global61_'+str(trialnum)))
 
 env = PruningEnv()
 env.model.load_state_dict(torch.load(os.getcwd() + \
-                                                '/pruned_march_17_global23.pth')['state_dict'])
+                                                '/pruned_march_17_global61.pth')['state_dict'])
 env.optimizer.load_state_dict(torch.load(os.getcwd() + \
-                            '/pruned_march_17_global23.pth')['optim'])
+                            '/pruned_march_17_global61.pth')['optim'])
         
  
 
 val_acc = env._evaluate_model()
 print(val_acc)
 for n_iter in range(85):
-    if epoch in ([25,55]):
+    if n_iter in ([25,55]):
         for param_group in env.optimizer.param_groups:
             param_group['lr'] *= 0.1
     print("EPOCH",n_iter)
@@ -44,7 +44,7 @@ val_acc = env._evaluate_model()
 print(val_acc)
 
 ##Train the final to compare with the unpruned model
-PATH = os.getcwd() + '/pruned_march_17_global_trained_23_' + str(trialnum) + '.pth'
+PATH = os.getcwd() + '/pruned_march_17_global_trained_61_' + str(trialnum) + '.pth'
 model_dicts = {'state_dict': env.model.state_dict(),
         'optim': env.optimizer.state_dict()}
 torch.save(model_dicts, PATH)
