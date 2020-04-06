@@ -8,20 +8,26 @@
 !misc/
 !small_scale_implementation/
 !small_scale_implementation_baseline/
+!basiccnn_cifar
 !early_bird_experiments/
+
+#Ignore these folders
 
 early_bird_experiments/data.cifar10
 early_bird_experiments/data.cifar100
 early_bird_experiments/baseline
 early_bird_experiments/__pycache__
 early_bird_experiments/*.json
-
 early_bird_experiments/models/__pycache__
 early_bird_experiments/optim/__pycache__
-
-
 small_scale_implementation/*
 small_scale_implementation_baseline/*
+basiccnn_cifar/*
+
+
+#Except for specific contents
+!basiccnn_cifar/*.py
+!basiccnn_cifar/*.pth
 !small_scale_implementation/runs/*
 !small_scale_implementation/*.py
 !small_scale_implementation/*.pt
