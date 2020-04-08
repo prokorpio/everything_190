@@ -18,18 +18,18 @@ logging.basicConfig(level=logging.INFO,
                             ' %(message)s'))
 
 get_log = True 
-xp_num_ = 100
+xp_num_ = 108
 
 
 
-M = 400# no reason, number of training episodes
+M = 100# no reason, number of training episodes
 
 if get_log:
     print ("Initializing Experiment", xp_num_, "Writer")
-    writer = SummaryWriter(('runs_march25_mnist/experiment_' + str(xp_num_)))
+    writer = SummaryWriter(('runs_april_RL/experiment_' + str(xp_num_)))
 
 # Define Agent, Training Env, & HyperParams
-env = PruningEnv(dataset = 'mnist')
+env = PruningEnv()
 
 print(env.get_global_state_rep().shape)
 
@@ -46,7 +46,7 @@ for name, param in env.model.named_parameters():
 
 #make an agent with said action_size
 #5e-3 shows promise 103 evaporated upon multiple trials
-agent = REINFORCE_agent(env.state_size, action_size=total_filters_count, lr = 1e-4)
+agent = REINFORCE_agent(env.state_size, action_size=total_filters_count, lr = 1e-7)
 
 print("Neural network has a total of" , total_filters_count)
 print(size_of_layer, len(size_of_layer))
@@ -97,7 +97,7 @@ for episode in range(M):
     #global_tempmask = action
     ##inspect each layer's mask and unprune if needed
     idx = 0
-    
+    total_pruned = 0
     for i in range(len(size_of_layer)):
         
         #choose the layer
@@ -107,21 +107,31 @@ for episode in range(M):
         layer_values = action[idx:idx+size_of_layer[i]].clone()
         layer_pruned = global_tempmask[idx:idx+size_of_layer[i]].sum()
         
+        #if local
+        layer_tempmask = action[idx:idx + size_of_layer[i]].clone()
+        layer_rank = torch.topk(layer_tempmask, int(size_of_layer[i]*ratio_prune), largest = False)
+        layer_mask = torch.ones(size_of_layer[i])
+        layer_mask[layer_rank[1]] = 0
+    
         
+         #Renaming local to fit with global scheme convention
+        layer_action = layer_mask
+        layer_values = layer_tempmask
+        layer_pruned = layer_action.sum()
+
 
         print("Proposed_layer_kept",layer_pruned)
         if layer_pruned < int(limit_rem * size_of_layer[i]):
             unprune = torch.topk(layer_values,int(limit_rem*size_of_layer[1]),largest = True)
             layer_action[unprune[1]] = True
-            global_tempmask[idx:idx+size_of_layer[i]] = layer_action
 
         else:
             pass
             
 
-        print("Amount kept is", global_tempmask[idx:idx+size_of_layer[i]].sum())
-        layer_action = torch.unsqueeze(global_tempmask[idx:idx+size_of_layer[i]],0)  
-
+        print("Amount kept is", layer_action.sum())
+        layer_action = torch.unsqueeze(layer_action,0)  
+        total_pruned += size_of_layer[i] - layer_mask.sum()
         ###Actual_Pruning
         filters_counted, pruned_counted = env.prune_layer(layer_action)           
         idx += size_of_layer[i]
@@ -136,7 +146,7 @@ for episode in range(M):
 
 
     
-    amount_pruned = 960-global_tempmask.sum()
+    amount_pruned = 960-total_pruned
     reward,acc,flop,flops_ratio = env._calculate_reward(total_filters_count, amount_pruned)
     action_reward_buffer.append((action, reward))
 
@@ -149,8 +159,6 @@ for episode in range(M):
             total_flops_ratio = flops_ratio_accumulated/4
             #total_xps = episode*len(layers_to_prune) + xp_num
             writer.add_scalar('Accuracy_vs_Episode', acc, episode)
-            # writer.add_scalar('Pruned_Flops_Ratio_vs_Episode', 
-                              # total_flops_ratio, episode)
             writer.add_scalar('Amount_Pruned_vs_Episode',
                               amount_pruned_accum, episode)
             writer.add_scalar('Reward_vs_Episode', 
@@ -175,8 +183,61 @@ if get_log:
                  time.strftime("%H:%M:%S", time.gmtime(elapsed_time))))
     
 
-##Train the final to compare with the unpruned model
-PATH = os.getcwd() + '/pruned_march_22' + str(xp_num_) + '.pth'
-model_dicts = {'state_dict': env.model.state_dict(),
-        'optim': env.optimizer.state_dict()}
-torch.save(model_dicts, PATH)
+###Obtain Final Network and it's inverse
+#Reset the network
+env.reset_to_k()
+
+#Get the state_rep and the corresponding action
+state_rep = env.get_global_state_rep()
+    
+state_rep = state_rep.cpu()
+action, action_log_prob = agent.get_action(state_rep)
+
+idx = 0
+total_pruned = 0
+inv_flaglist = [True, False]
+for inv_flag in inv_flaglist:
+    for i in range(len(size_of_layer)):
+        
+        #choose the layer
+        env.layer = env.layers_to_prune[i]
+        
+        #if local
+        layer_tempmask = action[idx:idx + size_of_layer[i]].clone()
+        
+        if inv_flag == True:
+            layer_rank = torch.topk(layer_tempmask, int(size_of_layer[i]*ratio_prune), largest = True)
+        else:
+            layer_rank = torch.topk(layer_tempmask, int(size_of_layer[i]*ratio_prune), largest = False)
+        layer_mask = torch.ones(size_of_layer[i])
+        layer_mask[layer_rank[1]] = 0
+
+        
+        #Renaming local to fit with global scheme convention
+        layer_action = layer_mask
+        layer_values = layer_tempmask
+        layer_pruned = layer_action.sum()
+
+
+            
+
+        print("Amount kept is", layer_action.sum())
+        layer_action = torch.unsqueeze(layer_action,0)  
+        total_pruned += size_of_layer[i] - layer_mask.sum()
+        ###Actual_Pruning
+        filters_counted, pruned_counted = env.prune_layer(layer_action)           
+        idx += size_of_layer[i]
+
+
+    idx = 0
+    ##Train the final to compare with the unpruned model
+    
+    if inv_flag == True:
+        PATH = os.getcwd() + '/april_RL_inv' + str(xp_num_) + '.pth'
+    else:
+        
+        PATH = os.getcwd() + '/april_RL' + str(xp_num_) + '.pth'
+    model_dicts = {'state_dict': env.model.state_dict(),
+            'optim': env.optimizer.state_dict()}
+    torch.save(model_dicts, PATH)
+

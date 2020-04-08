@@ -32,7 +32,7 @@ class PruningEnv:
 
     def __init__(self, dataset='cifar10', 
                  model_type='basic',
-                 state_size = 960+960):
+                 state_size = 960+960+960):
 
         # assign dataset
         self.dataset = dataset
@@ -338,6 +338,9 @@ class PruningEnv:
                                 # addn'ls to be concat thru ff conditions
         grad_rep = self.get_grads()
         state_rep = torch.cat((state_rep, grad_rep),0)
+        bn_rep = self.get_BNs()
+        bn_rep = torch.abs(bn_rep)
+        state_rep = torch.cat((state_rep, bn_rep),0)
         print(state_rep.shape)
         return state_rep
     def get_BNs(self):
@@ -348,6 +351,9 @@ class PruningEnv:
                     bn_rep = torch.cat((bn_rep, var),0)
                 except: #initialize if not initialized yet
                     bn_rep = var
+        
+        bn_rep -= bn_rep.min()
+        bn_rep /= bn_rep.max()
         return bn_rep
         
     def get_grads(self):

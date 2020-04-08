@@ -45,9 +45,9 @@ if get_log:
     writer = SummaryWriter(('runs_march16/experiment_' + str(xp_num_)))
 
 # Define Agent, Training Env, & HyperParams
-env = PruningEnv()
+env = PruningEnv(state_size = 960+960+960)
 agent = REINFORCE_agent(env.state_size, action_size=960)
-M = 600# no reason, number of training episodes
+M = 6# no reason, number of training episodes
 
 # Define RandSubnet, for benchmarking
 rand_compare = False 
