@@ -109,7 +109,38 @@ class RandSubnet():
         val_acc = float(correct/total)
         
         return val_acc
+def step_from(mask, num_to_flip = 2):
+    ''' Function to transition from one state to another.
+        Flips equal amounts of zeros and ones to maintain sparsity. 
+        num_to_flip is the Hamming distance bet prev and new mask'''
 
+    one_indices_old = torch.nonzero(mask).squeeze()
+    zero_indices_old = torch.nonzero((mask == 0)).squeeze()
+
+    
+    these_zeros = torch.randperm(zero_indices_old.shape[0])[:num_to_flip]
+    these_ones = torch.randperm(one_indices_old.shape[0])[:num_to_flip]
+    
+    
+    one_indices_new = one_indices_old[these_ones]
+    zero_indices_new = zero_indices_old[these_zeros]
+
+    new_mask = mask.clone().detach()
+    new_mask[one_indices_new] = 0
+    new_mask[zero_indices_new] = 1
+
+    
+    return new_mask
+    
+def is_in_list(new_mask, masklist):
+    is_in_list_flag = 0
+    for elem in masklist:
+        if torch.all(torch.eq(new_mask,elem)):
+            is_in_list_flag = 1
+            break
+        else:
+            pass
+    return is_in_list_flag
 def extract_feature_map_sizes(model, input_data_shape, device = None):
     ''' Hook to get conv and fc layerwise feat map sizes
 

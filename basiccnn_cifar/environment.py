@@ -451,7 +451,7 @@ class PruningEnv:
             evaluates the model being pruned'''
 
         self.model.eval()
-        logging.info('Evaluating CNN model''')
+        #logging.info('Evaluating CNN model''')
         total = 0 # total number of labels
         correct = 0 # total correct preds
         
@@ -475,11 +475,11 @@ class PruningEnv:
 
         # train for M epochs
         #self._train_model(num_epochs=1)
-        logging.info("Training skipped")
+        #logging.info("Training skipped")
 
         # test
         acc = self._evaluate_model() # acc is in {0,1}
-        logging.info('Validation Accuracy: {:.2f}%'.format(acc*100))
+        #logging.info('Validation Accuracy: {:.2f}%'.format(acc*100))
 
         # get flops 
         flops_orig, flops_remain = self._estimate_layer_flops()
@@ -493,16 +493,16 @@ class PruningEnv:
         flops_ratio = float(float(flops_remain) / float(flops_orig))
         # get reward as func of acc and flops
         reward = acc #+ float(amount_pruned)/float(total_filters)
-        print(reward, "reward")
-        print(amount_pruned, "pruned")
-        print(total_filters, "filters")
+        # print(reward, "reward")
+        # print(amount_pruned, "pruned")
+        # print(total_filters, "filters")
         # logging.info("%Layer Flops: {}".format(flops_ratio))
-        logging.info("Reward: {}".format(reward))
+        #logging.info("Reward: {}".format(reward))
         # logging.info("Flops Remain: {}".format(np.log(flops_remain)))
-        logging.info("Amount_pruned: {}".format(amount_pruned))
+        #logging.info("Amount_pruned: {}".format(amount_pruned))
 
         return reward, acc, flops_orig, flops_ratio
-    
+        
     def param_to_mask(self, ratio, method):
         if method == 'weight_norm':
             for name, module in self.model.named_modules(): # this model changes
