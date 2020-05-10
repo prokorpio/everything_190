@@ -468,7 +468,23 @@ class PruningEnv:
         val_acc = float(correct/total)
         val_acc = torch.tensor(val_acc, requires_grad = True)
         return val_acc#, correct, total
-                
+    
+    def forward_pass(self, num_of_batches):
+        ''' Forward pass on n batches '''
+
+        self.model.eval()
+        test_loss = 0
+        correct = 0
+        with torch.no_grad():
+            for _ in range(num_of_batches):
+                data, target = next(iter(self.test_dl))
+                data, target = data.to(self.device), target.to(self.device)
+                output = self.model(data)
+                test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
+                pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+                correct += pred.eq(target.view_as(pred)).sum().item()
+
+        return 100. * correct / (num_of_batches*self.test_dl.batch_size)            
     def _calculate_reward(self, total_filters, amount_pruned): 
         ''' Performs the ops to get reward 
             of action of current layer'''
@@ -789,6 +805,36 @@ class PruningEnv:
         self.layer = layer_to_process
         # save total network flops
         self.full_model_flops = sum(self.layer_flops.values())
+        
+    def reset_to_init_1(self):
+        ''' resets CNN to partially trained net w/ full params'''
+        #self.model.load_state_dict(self.init_full_weights)
+
+        #self.model = copy.deepcopy(torch.load(os.getcwd() + \
+        #                                        '/partially_trained_3.pt',
+        #                                        map_location = self.device))
+        self.model.load_state_dict(torch.load(os.getcwd() + \
+                                                '/init_may_10_num_1.pth')['state_dict'])
+        self.optimizer.load_state_dict(torch.load(os.getcwd() + \
+                                    '/init_may_10_num_1.pth')['optim'])
+        # initialize starting layer to process
+        self.layer = self.layers_to_prune[0]
+        # initialize prune amounts to zer
+        self.layer_prune_amounts = OrderedDict(zip(self.layers_to_prune,\
+                                                [0]*len(self.layers_to_prune)))
+        # get layer_flops dict 
+        layer_to_process = self.layer # preserve
+        for name in self.layers_to_prune:
+                self.layer = name
+                orig_flops, flops_remain = self._estimate_layer_flops() 
+                                #TODO: might be better to explicitly pass layer
+                                # name to estimate_flops()
+                self.layer_flops[self.layer] = flops_remain
+        self.layer = layer_to_process
+        # save total network flops
+        self.full_model_flops = sum(self.layer_flops.values())    
+
+
         
     def load_trained(self):
         '''loads a trained model'''

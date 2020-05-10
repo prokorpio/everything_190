@@ -18,7 +18,8 @@ import argparse
 
 from collections import deque
 
-xp_num_ = 5
+xp_num_ = 9
+trialnum = xp_num_
 writer = SummaryWriter(('runs_april_SA/experiment_' + str(xp_num_)))
 ###Argument parsing
 parser = argparse.ArgumentParser(description='Arguments for masker')
@@ -33,10 +34,10 @@ parser.add_argument('--inv_flag', action = 'store_true', default = False,
 
 args = parser.parse_args()
 
-trialnum = 5
+
 
 env = PruningEnv()
-env.reset_to_k()
+env.reset_to_init_1()
 
 #### Obtain layers of the neural network
 total_filters_count = 0
@@ -51,8 +52,8 @@ mask_list = 0
 mask = torch.cat((torch.ones((3)), torch.zeros((3))),0)
 mask = torch.rand((total_filters_count))
 print(mask)
-mask[mask >0.8] = 1
-mask[mask<=0.8] = 0
+mask[mask >0.3] = 1
+mask[mask<=0.3] = 0
 print(mask)
 mask_list = copy.deepcopy(mask)
 
@@ -98,6 +99,7 @@ while (stop_flag == True):
     print("TRIAL START------------------")
     #Find a new TEST mask
     for i in range(int(iter_per_temp)):
+        # z = z + 1
         new_mask_flag = 0
         while new_mask_flag == 0:
             print("Generating New Mask")
@@ -115,7 +117,7 @@ while (stop_flag == True):
         #Tentatively implement the mask
         idx = 0
         total_pruned = 0
-        env.reset_to_k()
+        env.reset_to_init_1()
         for i in range(len(size_of_layer)):
             env.layer = env.layers_to_prune[i]
             layer_mask = new_mask[idx:idx+size_of_layer[i]].clone()
@@ -129,8 +131,9 @@ while (stop_flag == True):
         idx = 0
         
         #Check if keep or discard
-        _, new_acc, _, _  = env._calculate_reward(total_filters_count, amount_pruned)
-        new_acc = new_acc * 100
+        # _, new_acc, _, _  = env._calculate_reward(total_filters_count, amount_pruned)
+        new_acc = env.forward_pass(1)
+        # new_acc = new_acc * 100
         # print("ACC IS ", new_acc)
         
         ave_acc = sum(accs)/len(accs)
@@ -190,6 +193,11 @@ while (stop_flag == True):
     z += 1
     if z == 10000:
         stop_flag = False
+        
+PATH = os.getcwd() + '/pruned_may_10' + str(xp_num_) + '.pth'
+model_dicts = {'state_dict': env.model.state_dict(),
+        'optim': env.optimizer.state_dict()}
+torch.save(model_dicts, PATH)
 writer.close()
 # print(closed_q)
 
