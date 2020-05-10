@@ -18,7 +18,7 @@ import argparse
 
 from collections import deque
 
-xp_num_ = 3
+xp_num_ = 5
 writer = SummaryWriter(('runs_april_SA/experiment_' + str(xp_num_)))
 ###Argument parsing
 parser = argparse.ArgumentParser(description='Arguments for masker')
@@ -33,7 +33,7 @@ parser.add_argument('--inv_flag', action = 'store_true', default = False,
 
 args = parser.parse_args()
 
-trialnum = 3
+trialnum = 5
 
 env = PruningEnv()
 env.reset_to_k()
@@ -51,8 +51,8 @@ mask_list = 0
 mask = torch.cat((torch.ones((3)), torch.zeros((3))),0)
 mask = torch.rand((total_filters_count))
 print(mask)
-mask[mask >0.3] = 1
-mask[mask<=0.3] = 0
+mask[mask >0.8] = 1
+mask[mask<=0.8] = 0
 print(mask)
 mask_list = copy.deepcopy(mask)
 
@@ -80,6 +80,7 @@ max_iter_per_temp = 50 # ceiling on iterations per temp value'
 ave_acc = 5
 accs = [ave_acc]
 acc_temp = 0.075
+acc_temp_decay = 0.995
 
 
 stop_flag = True #Remove this later with always true. It is merely a place holder for now to stop after one iteration
