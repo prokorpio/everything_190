@@ -117,7 +117,9 @@ def step_from(mask, num_to_flip = 2):
     one_indices_old = torch.nonzero(mask).squeeze()
     zero_indices_old = torch.nonzero((mask == 0)).squeeze()
 
-    
+    print("Num_to_flip", num_to_flip)
+    print("zero_indices_old", zero_indices_old.shape[0])
+    print("one_indices_old", one_indices_old.shape[0])
     these_zeros = torch.randperm(zero_indices_old.shape[0])[:num_to_flip]
     these_ones = torch.randperm(one_indices_old.shape[0])[:num_to_flip]
     

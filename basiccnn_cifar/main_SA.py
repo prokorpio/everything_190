@@ -18,8 +18,9 @@ import argparse
 
 from collections import deque
 
-xp_num_ = 9
+xp_num_ = 30
 trialnum = xp_num_
+
 writer = SummaryWriter(('runs_april_SA/experiment_' + str(xp_num_)))
 ###Argument parsing
 parser = argparse.ArgumentParser(description='Arguments for masker')
@@ -27,13 +28,17 @@ parser.add_argument('--criterion', type=str, default='mag',
                     help='criterion to use')
 parser.add_argument('--foldername', type=str, default = 'trash',
                     help='folder to store masked networks in')
-parser.add_argument('--ratio_prune', type=float, default = 0.5,
+parser.add_argument('--ratio_prune', type=float, default = 0.8,
                     help='amount to prune')
 parser.add_argument('--inv_flag', action = 'store_true', default = False,
                     help='invert criterion if True')
 
+
+
 args = parser.parse_args()
 
+
+ratio_prune = args.ratio_prune
 
 
 env = PruningEnv()
@@ -48,12 +53,14 @@ for name, param in env.model.named_parameters():
         size_of_layer.append(param.shape[0])
 
 
+###Setting the initial mask sparsity
 mask_list = 0
-mask = torch.cat((torch.ones((3)), torch.zeros((3))),0)
-mask = torch.rand((total_filters_count))
+rand_values = torch.rand((total_filters_count))
+mask_rank = torch.topk(rand_values,int(rand_values.shape[0]*ratio_prune),largest = False)
+
+mask = torch.ones((total_filters_count))
+mask[mask_rank[1]] = 0
 print(mask)
-mask[mask >0.3] = 1
-mask[mask<=0.3] = 0
 print(mask)
 mask_list = copy.deepcopy(mask)
 
@@ -67,7 +74,9 @@ mem_size = 50
 
 
 ##HAM DIST VARS
-ham_dist = int(mask.sum()/2)
+ham_dist = int(mask.sum())
+##Remove the divided by 2
+
 ham_dist_decay = 0.99
 prev_ham_dist = ham_dist
 
@@ -77,16 +86,25 @@ iter_per_temp =  1# allows multiple decisions per given temp value
 iter_multiplier = 1.005 # increase iters for every temp decrease
 max_iter_per_temp = 50 # ceiling on iterations per temp value'
 
-
+###Acc variables
 ave_acc = 5
 accs = [ave_acc]
 acc_temp = 0.075
 acc_temp_decay = 0.995
 
+###step-type variables
+up_steps = 0
+down_steps = 0
+no_steps = 0
 
+
+#Iteration variables
 stop_flag = True #Remove this later with always true. It is merely a place holder for now to stop after one iteration
+z = 0 #num of temps
+total_iter_count = 0
 
-z = 0
+test_set_batches = 10
+
 current_mask = mask
 
 closed_q = deque(maxlen=mem_size)
@@ -94,11 +112,19 @@ closed_q.append(current_mask)
 
 print(closed_q, "Closed_Q")
 new_mask_flag = 0 # 1 if new mask found
-print("Current_Mask")
+
+
+
+
+
+print(mask.sum(), "The SUM")
+print("Starting the experiment")
+start_time = time.time()
 while (stop_flag == True):
     print("TRIAL START------------------")
     #Find a new TEST mask
     for i in range(int(iter_per_temp)):
+        total_iter_count = total_iter_count + 1
         # z = z + 1
         new_mask_flag = 0
         while new_mask_flag == 0:
@@ -132,7 +158,7 @@ while (stop_flag == True):
         
         #Check if keep or discard
         # _, new_acc, _, _  = env._calculate_reward(total_filters_count, amount_pruned)
-        new_acc = env.forward_pass(1)
+        new_acc = env.forward_pass(test_set_batches)
         # new_acc = new_acc * 100
         # print("ACC IS ", new_acc)
         
@@ -148,6 +174,7 @@ while (stop_flag == True):
             
             #Update the averate
             ave_acc = sum(accs)/len(accs)
+            down_steps = down_steps + 1
         else:
             print("Deciding...")
             allow_uphill = True
@@ -162,8 +189,12 @@ while (stop_flag == True):
                     
                     #Update the average before resetting
                     ave_acc = sum(accs)/len(accs)
+                    
+                    up_steps = up_steps + 1
                 else:
                     print("Rejected")
+                    
+                    no_steps = no_steps + 1
                     pass
         
     accs = [ave_acc]
@@ -189,17 +220,76 @@ while (stop_flag == True):
     
     
     
+    
 
     z += 1
-    if z == 10000:
+    
+    #If last iteration save model
+    if z == 10:
+    
+    
+            ###Check the amount per layer
+        layer_mask = [] #list
+        num_per_layer = []
+        for module in env.model.modules():
+            #for conv2d obtain the filters to be kept.
+            if isinstance(module, nn.BatchNorm2d):
+                weight_copy = module.weight.data.clone()
+                filter_mask = weight_copy.gt(0.0).float()
+                #print(filter_mask)
+                #print(weight_copy)
+                layer_mask.append(filter_mask)
+
+
+
+        for i, item in enumerate(layer_mask):
+            ###Have to use.item for singular element tensors to extract the element
+            ###Have to use int()
+            num_per_layer.append(int(item.sum().item()))
+            
+        print(num_per_layer)
+        total = 0 
+        for item in num_per_layer:
+            total += item
+            
+        print(total)
+    
+    
+    
+        PATH = os.getcwd() + '/masked/SA' + str(ratio_prune) + '_' + str(xp_num_) + '.pth'
+        model_dicts = {'state_dict': env.model.state_dict(),
+                'optim': env.optimizer.state_dict(),
+                'filters_per_layer': num_per_layer}
+        torch.save(model_dicts, PATH)
+    
+        
         stop_flag = False
         
-PATH = os.getcwd() + '/pruned_may_10' + str(xp_num_) + '.pth'
-model_dicts = {'state_dict': env.model.state_dict(),
-        'optim': env.optimizer.state_dict()}
-torch.save(model_dicts, PATH)
+elapsed_time = time.time() - start_time
+print("Elapsed time is", elapsed_time)
 writer.close()
 # print(closed_q)
 
-
+###LogFile
+log_file = open("test.txt", "w")
+log_file.write(os.getcwd() + '/masked/SA' + str(ratio_prune) + '_' + str(xp_num_) + '.pth\n')
+log_file.write("Hyperparameters\n")
+log_file.write(str("acc_temp: " + str(acc_temp) +  "\n"))
+log_file.write(str("acc_temp_decay: " + str(acc_temp_decay)+ "\n"))
+log_file.write(str("iter_per_temp: " + str(iter_per_temp)+ "\n"))
+log_file.write(str("iter_multiplier: " + str(iter_multiplier)+ "\n"))
+log_file.write(str("max_iter_per_temp: " + str(max_iter_per_temp)+ "\n"))
+log_file.write(str("ham_dist_init: " + str(ham_dist)+ "\n"))
+log_file.write(str("ham_dist_decay: " + str(ham_dist_decay)+ "\n"))
+log_file.write(str("mem_size: " + str(mem_size)+ "\n"))
+log_file.write(str("up_steps: " + str(up_steps) + "\n"))
+log_file.write(str("down_steps: " + str(down_steps) + "\n"))
+log_file.write(str("no_steps: " + str(no_steps) + "\n"))
+log_file.write(str("time_taken: " + str(elapsed_time) + "\n"))
+log_file.write(str("num_temps: " + str(total_iter_count) + "\n"))
+log_file.write(str("temps_tried: " + str(z) + "\n"))
+log_file.write(str("num_batches: " + str(10) + "\n"))
+log_file.write(str("final_structure: " + str(num_per_layer) + "\n"))
+log_file.write(str("last_ave_acc: (NOT NECESSARILY THE ACTUAL ACC): " + str(accs) + "\n"))
+log_file.close()
 ###TEST WITH UPHILL AND NO UPHILL
