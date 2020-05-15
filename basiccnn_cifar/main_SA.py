@@ -18,10 +18,10 @@ import argparse
 
 from collections import deque
 
-xp_num_ = 20
+xp_num_ = 1
 trialnum = xp_num_
 description = "70_sparse"
-writer = SummaryWriter(('runs_april_SA_may12/experiment_0_7_rand' + str(xp_num_) + str(description)))
+writer = SummaryWriter(('runs_SA_may_15/experiment_0_7_rand' + str(xp_num_) + str(description)))
 ###Argument parsing
 parser = argparse.ArgumentParser(description='Arguments for masker')
 parser.add_argument('--criterion', type=str, default='mag',
@@ -70,18 +70,19 @@ mask_list = copy.deepcopy(mask)
 
 
 mem_size = 60
+mem_attempts = 60
+
 
 
 
 ##HAM DIST VARS
 ham_dist = int(mask.sum()/10)
 ##Remove the divided by 2
-
 ham_dist_decay = 0.99
 prev_ham_dist = ham_dist
 
-###TEMP variables
 
+###TEMP variables
 iter_per_temp =  1# allows multiple decisions per given temp value
 iter_multiplier = 1.005 # increase iters for every temp decrease
 max_iter_per_temp = 10 # ceiling on iterations per temp value'
@@ -103,7 +104,7 @@ stop_flag = True #Remove this later with always true. It is merely a place holde
 z = 0 #num of temps
 total_iter_count = 0
 
-test_set_batches = 30
+test_set_batches = 1
 
 current_mask = mask
 
@@ -123,22 +124,27 @@ start_time = time.time()
 while (stop_flag == True):
     print("TRIAL START------------------")
     #Find a new TEST mask
-    for i in range(int(iter_per_temp)):
+    for k in range(int(iter_per_temp)):
         total_iter_count = total_iter_count + 1
         # z = z + 1
-        new_mask_flag = 0
-        while new_mask_flag == 0:
+        # new_mask_flag = 0
+        # while new_mask_flag == 0:
+        for j in range(mem_attempts):
             print("Generating New Mask")
             new_mask = step_from(current_mask, ham_dist)
             if is_in_list(new_mask, closed_q):
                 print("Duplicate")
                 # print(new_mask)
+                #if last iteration
+                if j == mem_attempts - 1:
+                    new_mask = current_mask
             else:
                 print("Non duplicate")
                 # print("Final_mask", current_mask)
                 
                 closed_q.append(new_mask)
                 new_mask_flag = 1
+                break
         
         #Tentatively implement the mask
         idx = 0
@@ -158,9 +164,9 @@ while (stop_flag == True):
         
         #Check if keep or discard
         # _, new_acc, _, _  = env._calculate_reward(total_filters_count, amount_pruned)
-        #new_acc = env.forward_pass(test_set_batches)
-        new_acc = env._evaluate_model()
-        new_acc = new_acc * 100
+        new_acc = env.forward_pass(test_set_batches)
+        #new_acc = env._evaluate_model()
+        #new_acc = new_acc * 100
         # print("ACC IS ", new_acc)
         
         ave_acc = sum(accs)/len(accs)
@@ -227,53 +233,43 @@ while (stop_flag == True):
 
     z += 1
     
-    #If last iteration save model
-    if z == 1:
-    
-    
-        ###Check the amount per layer
-        layer_mask = [] #list
-        num_per_layer = []
-        for module in env.model.modules():
-            #for conv2d obtain the filters to be kept.
-            if isinstance(module, nn.BatchNorm2d):
-                weight_copy = module.weight.data.clone()
-                filter_mask = weight_copy.gt(0.0).float()
-                #print(filter_mask)
-                #print(weight_copy)
-                layer_mask.append(filter_mask)
+    #If last iteration break loop
+    if z == 1000:
 
-
-
-        for i, item in enumerate(layer_mask):
-            ###Have to use.item for singular element tensors to extract the element
-            ###Have to use int()
-            num_per_layer.append(int(item.sum().item()))
-            
-        print(num_per_layer)
-        total = 0 
-        for item in num_per_layer:
-            total += item
-            
-        print(total)
-    
-    
-    
-        PATH = os.getcwd() + '/masked_may_12/SA' + str(ratio_prune) + '_' + str(xp_num_) + '.pth'
-        model_dicts = {'state_dict': env.model.state_dict(),
-                'optim': env.optimizer.state_dict(),
-                'filters_per_layer': num_per_layer}
-        torch.save(model_dicts, PATH)
-    
-        
         stop_flag = False
 
 
 final_acc = env._evaluate_model()        
-print("Prefinal accuracy is ", final_acc)
+print("Last tried (not accepted) mask has ", final_acc)
+
+
+
+###Prune with the last ACCEPTED mask
+###Check the amount per layer
+layer_mask = [] #list
+num_per_layer = []
+for module in env.model.modules():
+    #for conv2d obtain the filters to be kept.
+    if isinstance(module, nn.BatchNorm2d):
+        weight_copy = module.weight.data.clone()
+        filter_mask = weight_copy.gt(0.0).float()
+        #print(filter_mask)
+        #print(weight_copy)
+        layer_mask.append(filter_mask)
+
+for i, item in enumerate(layer_mask):
+    ###Have to use.item for singular element tensors to extract the element
+    ###Have to use int()
+    num_per_layer.append(int(item.sum().item()))
+    
+print(num_per_layer)
+total = 0 
+for item in num_per_layer:
+    total += item
+    
+print(total)
 
 ###Apply the last mask accepted
-#Tentatively implement the mask
 idx = 0
 total_pruned = 0
 env.reset_to_k()
@@ -290,6 +286,14 @@ amount_pruned = total_pruned
 idx = 0
 
 
+###Save into .pth
+PATH = os.getcwd() + '/masked_may_12/SA' + str(ratio_prune) + '_' + str(xp_num_) + '_' + str(description) + '_rand.pth'
+model_dicts = {'state_dict': env.model.state_dict(),
+        'optim': env.optimizer.state_dict(),
+        'filters_per_layer': num_per_layer}
+torch.save(model_dicts, PATH)
+
+
 
 final_acc = env._evaluate_model()       
 final_forpass = env.forward_pass(test_set_batches) 
@@ -298,46 +302,15 @@ print("Final forward pass is ", final_forpass)
 elapsed_time = time.time() - start_time
 print("Elapsed time is", elapsed_time)
 writer.close()
-# print(closed_q)
-
-###Mask with the llatest accepted mask
-###Check the amount per layer
-layer_mask = [] #list
-num_per_layer = []
-for module in env.model.modules():
-    #for conv2d obtain the filters to be kept.
-    if isinstance(module, nn.BatchNorm2d):
-        weight_copy = module.weight.data.clone()
-        filter_mask = weight_copy.gt(0.0).float()
-        #print(filter_mask)
-        #print(weight_copy)
-        layer_mask.append(filter_mask)
-
-
-
-for i, item in enumerate(layer_mask):
-    ###Have to use.item for singular element tensors to extract the element
-    ###Have to use int()
-    num_per_layer.append(int(item.sum().item()))
     
-print(num_per_layer)
-total = 0 
-for item in num_per_layer:
-    total += item
-    
-print(total)
 
 
 
-PATH = os.getcwd() + '/masked_may_12/SA' + str(ratio_prune) + '_' + str(xp_num_) + '_rand.pth'
-model_dicts = {'state_dict': env.model.state_dict(),
-        'optim': env.optimizer.state_dict(),
-        'filters_per_layer': num_per_layer}
-torch.save(model_dicts, PATH)
+
 
 ###LogFile
 log_file = open("testmay_12_exp_" + str(xp_num_) + ".txt", "w")
-log_file.write(os.getcwd() + '/masked_may_12/SA' + str(ratio_prune) + '_' + str(xp_num_) + '.pth\n')
+log_file.write(os.getcwd() + '/masked_may_12/SA' + str(ratio_prune) + '_' + str(xp_num_) + '_' + str(description) + '.pth\n')
 log_file.write("Hyperparameters\n")
 log_file.write(str("acc_temp: " + str(acc_temp) +  "\n"))
 log_file.write(str("acc_temp_decay: " + str(acc_temp_decay)+ "\n"))

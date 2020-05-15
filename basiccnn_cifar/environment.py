@@ -36,7 +36,7 @@ class PruningEnv:
 
         # assign dataset
         self.dataset = dataset
-        self.train_dl, self.test_dl = self.get_dataloaders()
+        self.train_dl, self.test_dl, self.val_dl = self.get_dataloaders()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         logging.info("Device {}".format(self.device))
@@ -103,7 +103,7 @@ class PruningEnv:
 
             train_loader = data.DataLoader(train,
                                            batch_size = 256,
-                                           shuffle = False,
+                                           shuffle = True,
                                            num_workers = 0, pin_memory = True)
             
             test = ds.CIFAR10(root = os.getcwd(),
@@ -117,8 +117,14 @@ class PruningEnv:
                                                            # larger batch_size
                                           shuffle = False,
                                           num_workers = 0, pin_memory = True)
+            
+            #val_loader for the SA algorithm
+            val_loader = data.DataLoader(train,
+                                        batch_size = 1024,
+                                        shuffle = False,
+                                        num_workers = 0, pin_memory = True)
 
-            return train_loader, test_loader
+            return train_loader, test_loader, val_loader
         elif self.dataset.lower() == 'mnist':
             print("Using mnist")
             mnist_transform = transforms.Compose([
@@ -477,14 +483,14 @@ class PruningEnv:
         correct = 0
         with torch.no_grad():
             for _ in range(num_of_batches):
-                data, target = next(iter(self.test_dl))
+                data, target = next(iter(self.val_dl))
                 data, target = data.to(self.device), target.to(self.device)
                 output = self.model(data)
                 test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
                 pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
                 correct += pred.eq(target.view_as(pred)).sum().item()
 
-        return 100. * correct / (num_of_batches*self.test_dl.batch_size)            
+        return 100. * correct / (num_of_batches*self.val_dl.batch_size)            
     def _calculate_reward(self, total_filters, amount_pruned): 
         ''' Performs the ops to get reward 
             of action of current layer'''
