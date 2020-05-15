@@ -41,11 +41,11 @@ else:
     PATH = os.getcwd() + str(folder) + 'pruned/' + str(criterion) + '_pruned_2.pth'
     print("Using NON-inverted criterion")
 
-# PATH = os.getcwd() + '/sgd_90_2_mnist1.pth'
+PATH = os.getcwd() + '/pruned/SA0.7_20_rand_pruned.pth'
 model_dicts = torch.load(PATH)
 
 filters_per_layer = model_dicts['filters_per_layer']
-# filters_per_layer = [64,128,256,512]
+#filters_per_layer = [64,128,256,512]
 pruned_subnet = RandSubnet(filter_counts = filters_per_layer)
 pruned_subnet.build()
 for name, param in pruned_subnet.model.named_modules():
@@ -60,10 +60,10 @@ if inv_flag == True:
 else:
     writer = SummaryWriter('runs_' + str(folder) + str(criterion) + '_pruned_2')
     
-
+writer = SummaryWriter('runs_may_12_70_exp_20_trained')
 start = time.time()
-for n_iter in range(0):
-    if n_iter in ([9,19]):
+for n_iter in range(85):
+    if n_iter in ([25,55]):
         for param_group in pruned_subnet.optimizer.param_groups:
             param_group['lr'] *= 0.1
     print("EPOCH",n_iter)
@@ -84,7 +84,7 @@ if inv_flag == True:
 
 else:
     PATH = os.getcwd() + str(folder) + 'trained/' + str(criterion) + '_pruned_trained_2.pth'
-# PATH = os.getcwd() + '/sgd_90_2_mnist1_trained.pth'
+PATH = os.getcwd() + '/SA0.7_20_rand_pruned_trained_90ep.pth'
 model_dicts = {'state_dict': pruned_subnet.model.state_dict(),
         'optim': pruned_subnet.optimizer.state_dict(),
         'filters_per_layer': filters_per_layer}

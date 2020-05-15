@@ -32,6 +32,7 @@ def actual_prune(path_from, path_to):
     env = PruningEnv()
     env.model.load_state_dict(torch.load(os.getcwd() + '/' + path_from)['state_dict'])
     env.optimizer.load_state_dict(torch.load(os.getcwd() + '/' + path_from)['optim']) 
+    print("accuracy is ", env._evaluate_model())
     layer_mask = [] #list
     num_per_layer = []
     for module in env.model.modules():
@@ -138,6 +139,10 @@ def actual_prune(path_from, path_to):
     print(newmodel.evaluate(env.test_dl))
     print(env._evaluate_model())
     print("successfulsave")
+
+actual_prune('masked_may_12/SA0.7_20_rand.pth', 'pruned/SA0.7_20_rand_pruned.pth')
+exit()
+
 
 crit_list = ['bn_abs', 'grad', 'mag','rand']
 inv_flag = args.inv_flag

@@ -18,17 +18,17 @@ import argparse
 
 from collections import deque
 
-xp_num_ = 30
+xp_num_ = 20
 trialnum = xp_num_
-
-writer = SummaryWriter(('runs_april_SA/experiment_' + str(xp_num_)))
+description = "70_sparse"
+writer = SummaryWriter(('runs_april_SA_may12/experiment_0_7_rand' + str(xp_num_) + str(description)))
 ###Argument parsing
 parser = argparse.ArgumentParser(description='Arguments for masker')
 parser.add_argument('--criterion', type=str, default='mag',
                     help='criterion to use')
 parser.add_argument('--foldername', type=str, default = 'trash',
                     help='folder to store masked networks in')
-parser.add_argument('--ratio_prune', type=float, default = 0.8,
+parser.add_argument('--ratio_prune', type=float, default = 0.7,
                     help='amount to prune')
 parser.add_argument('--inv_flag', action = 'store_true', default = False,
                     help='invert criterion if True')
@@ -42,7 +42,7 @@ ratio_prune = args.ratio_prune
 
 
 env = PruningEnv()
-env.reset_to_init_1()
+env.reset_to_k()
 
 #### Obtain layers of the neural network
 total_filters_count = 0
@@ -69,12 +69,12 @@ mask_list = copy.deepcopy(mask)
 
 
 
-mem_size = 50
+mem_size = 60
 
 
 
 ##HAM DIST VARS
-ham_dist = int(mask.sum())
+ham_dist = int(mask.sum()/10)
 ##Remove the divided by 2
 
 ham_dist_decay = 0.99
@@ -84,12 +84,12 @@ prev_ham_dist = ham_dist
 
 iter_per_temp =  1# allows multiple decisions per given temp value
 iter_multiplier = 1.005 # increase iters for every temp decrease
-max_iter_per_temp = 50 # ceiling on iterations per temp value'
+max_iter_per_temp = 10 # ceiling on iterations per temp value'
 
 ###Acc variables
 ave_acc = 5
 accs = [ave_acc]
-acc_temp = 0.075
+acc_temp = 0.005
 acc_temp_decay = 0.995
 
 ###step-type variables
@@ -103,7 +103,7 @@ stop_flag = True #Remove this later with always true. It is merely a place holde
 z = 0 #num of temps
 total_iter_count = 0
 
-test_set_batches = 10
+test_set_batches = 30
 
 current_mask = mask
 
@@ -143,7 +143,7 @@ while (stop_flag == True):
         #Tentatively implement the mask
         idx = 0
         total_pruned = 0
-        env.reset_to_init_1()
+        env.reset_to_k()
         for i in range(len(size_of_layer)):
             env.layer = env.layers_to_prune[i]
             layer_mask = new_mask[idx:idx+size_of_layer[i]].clone()
@@ -158,8 +158,9 @@ while (stop_flag == True):
         
         #Check if keep or discard
         # _, new_acc, _, _  = env._calculate_reward(total_filters_count, amount_pruned)
-        new_acc = env.forward_pass(test_set_batches)
-        # new_acc = new_acc * 100
+        #new_acc = env.forward_pass(test_set_batches)
+        new_acc = env._evaluate_model()
+        new_acc = new_acc * 100
         # print("ACC IS ", new_acc)
         
         ave_acc = sum(accs)/len(accs)
@@ -180,6 +181,7 @@ while (stop_flag == True):
             allow_uphill = True
             if allow_uphill:
                 q = torch.rand(1).item()
+                #q = 1 #Reject always for now
                 acc_prob = math.exp(-1*acc_delta/acc_temp)
                 print(acc_prob, "Acc_prob")
                 if q < acc_prob:
@@ -201,6 +203,7 @@ while (stop_flag == True):
     print("AVE ACC", accs)
     
     writer.add_scalar('ave_acc', ave_acc, z)
+    writer.add_scalar('new_acc', new_acc, z)
     writer.add_scalar('iter_per_temp', int(iter_per_temp),z)
     writer.add_scalar('ham_dist', ham_dist, z)
     writer.add_scalar('amount_pruned' , amount_pruned, z)
@@ -225,10 +228,10 @@ while (stop_flag == True):
     z += 1
     
     #If last iteration save model
-    if z == 10:
+    if z == 1:
     
     
-            ###Check the amount per layer
+        ###Check the amount per layer
         layer_mask = [] #list
         num_per_layer = []
         for module in env.model.modules():
@@ -256,7 +259,7 @@ while (stop_flag == True):
     
     
     
-        PATH = os.getcwd() + '/masked/SA' + str(ratio_prune) + '_' + str(xp_num_) + '.pth'
+        PATH = os.getcwd() + '/masked_may_12/SA' + str(ratio_prune) + '_' + str(xp_num_) + '.pth'
         model_dicts = {'state_dict': env.model.state_dict(),
                 'optim': env.optimizer.state_dict(),
                 'filters_per_layer': num_per_layer}
@@ -264,15 +267,77 @@ while (stop_flag == True):
     
         
         stop_flag = False
-        
+
+
+final_acc = env._evaluate_model()        
+print("Prefinal accuracy is ", final_acc)
+
+###Apply the last mask accepted
+#Tentatively implement the mask
+idx = 0
+total_pruned = 0
+env.reset_to_k()
+for i in range(len(size_of_layer)):
+    env.layer = env.layers_to_prune[i]
+    layer_mask = current_mask[idx:idx+size_of_layer[i]].clone()
+    layer_mask = torch.unsqueeze(layer_mask,0)
+    total_pruned += size_of_layer[i] - layer_mask.sum()
+    
+    filters_counted, pruned_counted = env.prune_layer(layer_mask)
+    idx += size_of_layer[i]
+
+amount_pruned = total_pruned
+idx = 0
+
+
+
+final_acc = env._evaluate_model()       
+final_forpass = env.forward_pass(test_set_batches) 
+print("Final accuracy is ", final_acc)
+print("Final forward pass is ", final_forpass)
 elapsed_time = time.time() - start_time
 print("Elapsed time is", elapsed_time)
 writer.close()
 # print(closed_q)
 
+###Mask with the llatest accepted mask
+###Check the amount per layer
+layer_mask = [] #list
+num_per_layer = []
+for module in env.model.modules():
+    #for conv2d obtain the filters to be kept.
+    if isinstance(module, nn.BatchNorm2d):
+        weight_copy = module.weight.data.clone()
+        filter_mask = weight_copy.gt(0.0).float()
+        #print(filter_mask)
+        #print(weight_copy)
+        layer_mask.append(filter_mask)
+
+
+
+for i, item in enumerate(layer_mask):
+    ###Have to use.item for singular element tensors to extract the element
+    ###Have to use int()
+    num_per_layer.append(int(item.sum().item()))
+    
+print(num_per_layer)
+total = 0 
+for item in num_per_layer:
+    total += item
+    
+print(total)
+
+
+
+PATH = os.getcwd() + '/masked_may_12/SA' + str(ratio_prune) + '_' + str(xp_num_) + '_rand.pth'
+model_dicts = {'state_dict': env.model.state_dict(),
+        'optim': env.optimizer.state_dict(),
+        'filters_per_layer': num_per_layer}
+torch.save(model_dicts, PATH)
+
 ###LogFile
-log_file = open("test.txt", "w")
-log_file.write(os.getcwd() + '/masked/SA' + str(ratio_prune) + '_' + str(xp_num_) + '.pth\n')
+log_file = open("testmay_12_exp_" + str(xp_num_) + ".txt", "w")
+log_file.write(os.getcwd() + '/masked_may_12/SA' + str(ratio_prune) + '_' + str(xp_num_) + '.pth\n')
 log_file.write("Hyperparameters\n")
 log_file.write(str("acc_temp: " + str(acc_temp) +  "\n"))
 log_file.write(str("acc_temp_decay: " + str(acc_temp_decay)+ "\n"))
@@ -291,5 +356,6 @@ log_file.write(str("temps_tried: " + str(z) + "\n"))
 log_file.write(str("num_batches: " + str(10) + "\n"))
 log_file.write(str("final_structure: " + str(num_per_layer) + "\n"))
 log_file.write(str("last_ave_acc: (NOT NECESSARILY THE ACTUAL ACC): " + str(accs) + "\n"))
+log_file.write(str("evaluated accuracy: " + str(final_acc) + "\n"))
 log_file.close()
 ###TEST WITH UPHILL AND NO UPHILL
