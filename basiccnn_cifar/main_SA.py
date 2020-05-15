@@ -18,9 +18,9 @@ import argparse
 
 from collections import deque
 
-xp_num_ = 1
+xp_num_ = 5
 trialnum = xp_num_
-description = "70_sparse"
+description = "90_sparse_large_ham_init_1"
 writer = SummaryWriter(('runs_SA_may_15/experiment_0_7_rand' + str(xp_num_) + str(description)))
 ###Argument parsing
 parser = argparse.ArgumentParser(description='Arguments for masker')
@@ -28,7 +28,7 @@ parser.add_argument('--criterion', type=str, default='mag',
                     help='criterion to use')
 parser.add_argument('--foldername', type=str, default = 'trash',
                     help='folder to store masked networks in')
-parser.add_argument('--ratio_prune', type=float, default = 0.7,
+parser.add_argument('--ratio_prune', type=float, default = 0.9,
                     help='amount to prune')
 parser.add_argument('--inv_flag', action = 'store_true', default = False,
                     help='invert criterion if True')
@@ -42,7 +42,7 @@ ratio_prune = args.ratio_prune
 
 
 env = PruningEnv()
-env.reset_to_k()
+env.reset_to_init_1()
 
 #### Obtain layers of the neural network
 total_filters_count = 0
@@ -70,13 +70,13 @@ mask_list = copy.deepcopy(mask)
 
 
 mem_size = 60
-mem_attempts = 60
+mem_attempts = 30
 
 
 
 
 ##HAM DIST VARS
-ham_dist = int(mask.sum()/10)
+ham_dist = int(mask.sum())
 ##Remove the divided by 2
 ham_dist_decay = 0.99
 prev_ham_dist = ham_dist
@@ -104,7 +104,7 @@ stop_flag = True #Remove this later with always true. It is merely a place holde
 z = 0 #num of temps
 total_iter_count = 0
 
-test_set_batches = 1
+test_set_batches = 10
 
 current_mask = mask
 
@@ -149,7 +149,7 @@ while (stop_flag == True):
         #Tentatively implement the mask
         idx = 0
         total_pruned = 0
-        env.reset_to_k()
+        env.reset_to_init_1()
         for i in range(len(size_of_layer)):
             env.layer = env.layers_to_prune[i]
             layer_mask = new_mask[idx:idx+size_of_layer[i]].clone()
@@ -245,6 +245,22 @@ print("Last tried (not accepted) mask has ", final_acc)
 
 
 ###Prune with the last ACCEPTED mask
+
+###Apply the last mask accepted
+idx = 0
+total_pruned = 0
+env.reset_to_k()
+for i in range(len(size_of_layer)):
+    env.layer = env.layers_to_prune[i]
+    layer_mask = current_mask[idx:idx+size_of_layer[i]].clone()
+    layer_mask = torch.unsqueeze(layer_mask,0)
+    total_pruned += size_of_layer[i] - layer_mask.sum()
+    
+    filters_counted, pruned_counted = env.prune_layer(layer_mask)
+    idx += size_of_layer[i]
+
+amount_pruned = total_pruned
+idx = 0
 ###Check the amount per layer
 layer_mask = [] #list
 num_per_layer = []
@@ -269,25 +285,11 @@ for item in num_per_layer:
     
 print(total)
 
-###Apply the last mask accepted
-idx = 0
-total_pruned = 0
-env.reset_to_k()
-for i in range(len(size_of_layer)):
-    env.layer = env.layers_to_prune[i]
-    layer_mask = current_mask[idx:idx+size_of_layer[i]].clone()
-    layer_mask = torch.unsqueeze(layer_mask,0)
-    total_pruned += size_of_layer[i] - layer_mask.sum()
-    
-    filters_counted, pruned_counted = env.prune_layer(layer_mask)
-    idx += size_of_layer[i]
 
-amount_pruned = total_pruned
-idx = 0
 
 
 ###Save into .pth
-PATH = os.getcwd() + '/masked_may_12/SA' + str(ratio_prune) + '_' + str(xp_num_) + '_' + str(description) + '_rand.pth'
+PATH = os.getcwd() + '/masked_may_12/SA' + str(ratio_prune) + '_' + str(xp_num_) + '_' + str(description) + '_.pth'
 model_dicts = {'state_dict': env.model.state_dict(),
         'optim': env.optimizer.state_dict(),
         'filters_per_layer': num_per_layer}
