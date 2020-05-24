@@ -11,7 +11,7 @@ import torch.nn.functional as F # special functions
 import torch.optim as optim # for optimizer = Adam
 #import matplotlib.pyplot as plt
 from model import PolicyNetwork
-
+from torch.distributions import Categorical
 import logging
 logging.basicConfig(level=logging.INFO, 
                     format=('%(levelname)s:' +
@@ -44,10 +44,23 @@ class REINFORCE_agent():
         #state = torch.from_numpy(state).float().unsqueeze(0) 
         # tensor convert for backprop compat
         # unsqueeze bc batch-dim expected @ dim=0
-
+        
+        #https://pytorch.org/docs/stable/distributions.html
+        #https://github.com/pytorch/examples/blob/master/reinforcement_learning/reinforce.py
         action_prob_distrib = self.policy(state) 
+        m = Categorical(action_prob_distrib)
+        
+        ###Sample from the (960,2) the first column will denote possibility of not keeping
+        ###The second will denote possibility of keeping
+        action = m.sample()
+        log_prob = m.log_prob(action)
+        
+        ###The ones to be kept are the ones with the highest "Keep" score
+        ###Note that the sum along the rows are equal to one
+        action_values = action_prob_distrib[:,1]
+        return action_values, log_prob, action
+        # return action_prob_distrib#, action_log_prob
         #action_log_prob = torch.log(action_prob_distrib) 
-        return action_prob_distrib#, action_log_prob
         #sampled_action = np.random.choice(self.action_size, \
         #                 p=np.squeeze(action_prob_distrib.detach().numpy()))
                                 # detach from autograd graph
@@ -57,55 +70,12 @@ class REINFORCE_agent():
         
         #return sampled_action, action_log_prob
 
-    def update_policy(self, episode_rewards, actions):
+    def update_policy(self, episode_rewards, actions,log_prob):
 
-        # Compute Return function for each experience in the episode
-        # print("episode_rewards", episode_rewards)
-        # print("actions", actions)
-        returns = np.zeros_like(episode_rewards)
-        Gt = 0.0
-        for t in reversed(range(len(episode_rewards))): # t is timestep
-            Gt = episode_rewards[t] + self.gamma*Gt     # Return function Gt
-            returns[t] = Gt                             # Return per time step     
-
-        # print("prestandardreturns", returns)
-        returns = torch.tensor(returns) 
-        #returns = (returns - returns.mean())/(returns.std() + 1e-9)
-                             # standardized to control variance of Return
-
-        expanded_returns = torch.zeros(len(returns), self.action_size)
-        # print("returns", returns)
-        # print("GT", Gt)
-        for i, Gt in enumerate(returns):
-            # mult Gt only on activated channels
-            expanded_returns[i, np.where(actions[i] >  0.5)[0]] = \
-                                                    Gt.type(torch.float)
-
-        # print("expanded_returns", expanded_returns)
-        expanded_returns[0,np.where(actions > 0.5)] = float(returns)
-        expanded_returns[0,np.where(actions <= 0.5)] = float(returns)
-        print(len(np.where(actions>0.5)[0]), "Shape of np.where")
         
-        # Compute gradients, 
-        #logging.info("Expanded returns[0]: {}".format(expanded_returns[0]))
-
-        try:
-            actions = torch.transpose(actions,0,1)
-        except IndexError:
-            print("No need to transpose")
-        #actions = torch.log(actions)
-        # print("actions", actions)
-        #logging.info("Actions:\n{}".format(actions))
-        # print("Actions", actions)
-        Jt = expanded_returns.matmul(actions) 
-        print("Jt", Jt)
-        #logging.info("Jt:\n{}".format(Jt))
-        #Jt = [] # will summands of objective function
-        #for log_prob, Gt in zip(log_probs, returns):
-        #    Jt.append(-log_prob*Gt) # REINFORCE policy gradient theorem,Q = Gt
-         
+        loss = (-log_prob *episode_rewards).sum()        
         self.policy.Adamizer.zero_grad() # reset weight update grads to zero
-        objective_func = Jt.sum()
+        objective_func = loss
         print("objective_func", objective_func)
         print("episode_rewards", episode_rewards)
  

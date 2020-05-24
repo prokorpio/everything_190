@@ -36,7 +36,7 @@ class PruningEnv:
 
         # assign dataset
         self.dataset = dataset
-        self.train_dl, self.test_dl = self.get_dataloaders()
+        self.train_dl, self.test_dl, self.valid_dl = self.get_dataloaders()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         logging.info("Device {}".format(self.device))
@@ -44,7 +44,14 @@ class PruningEnv:
         # build chosen model to prune
         self.model_type = model_type
         self.model = self._build_model_to_prune().to(self.device)
-
+ 
+        # Obtain conv layers of the model and it's size
+        self.total_filters = 0
+        self.layer_filters = []
+        for name, param in self.model.named_parameters():
+            if "conv" in name and "weight" in name:
+                self.total_filters += param.shape[0]
+                self.layer_filters.append(param.shape[0])
         #logging.info("Starting Pre-Training")
         # set training parameters
         self.loss_func = nn.CrossEntropyLoss()
@@ -76,58 +83,130 @@ class PruningEnv:
         self.max_layer_idx = 4 #TODO: can be derived from self.model
 
     def get_dataloaders(self):
-        ''' imports the chosen dataset '''
+        """Imports the chosen dataset
 
-        if self.dataset.lower() == 'cifar10':
-            # copied from marcus' rat5, lines 17:29
-            cifar10_trans = transforms.Compose([transforms.ToTensor(),
-                                        transforms.Normalize((0.5,0.5,0.5),
-                                                     (0.5,0.5,0.5))])
-            train_transform = transform=transforms.Compose([
-                           transforms.Pad(4),
-                           transforms.RandomCrop(32),
-                           transforms.RandomHorizontalFlip(),
-                           # transforms.Lambda(lambda x: filters.gaussian_filter(x, args.sigma) if args.filter == 'lowpass' else x),
-                           # transforms.Lambda(lambda x: my_gaussian_filter_2(x, 1/args.sigma, args.filter) if args.filter == 'highpass' else x),
-                           transforms.ToTensor(),
-                           # transforms.Lambda(lambda x: torch.where(x > args.sparsity_gt, x, torch.zeros_like(x)) if args.sparsity_gt > 0 else x),
-                           transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-                       ])
-            
-            test_transform = transform=transforms.Compose([
-                           # transforms.Lambda(lambda x: filters.gaussian_filter(x, args.sigma) if args.filter == 'lowpass' else x),
-                           # transforms.Lambda(lambda x: my_gaussian_filter_2(x, 1/args.sigma, args.filter) if args.filter == 'highpass' else x),
-                           transforms.ToTensor(),
-                           # transforms.Lambda(lambda x: torch.where(x > args.sparsity_gt, x, torch.zeros_like(x)) if args.sparsity_gt > 0 else x),
-                           transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-                       ])
-            
-            train = ds.CIFAR10(root = os.getcwd(),
-                               train = True,
-                               download = True,
-                               transform = cifar10_trans)
+        Returns:
+            train_dl, test_dl, valid_dl: dataloaders of datasets
 
-            train_loader = data.DataLoader(train,
-                                           batch_size = 256,
-                                           shuffle = False,
-                                           num_workers = 0, pin_memory = True)
-            
-            test = ds.CIFAR10(root = os.getcwd(),
-                              train = False,
-                              download = True,
-                              transform = cifar10_trans)
-            
-            test_loader = data.DataLoader(test,
-                                          batch_size = 256, # testing use less 
-                                                           # memory, can afford 
-                                                           # larger batch_size
-                                          shuffle = False,
-                                          num_workers = 0, pin_memory = True)
+        """
 
-            return train_loader, test_loader
-                              
-        # TODO: use proper exception handling
-        print('dataset not available') 
+        if self.dataset.lower() == "cifar10":
+            train_transform = transforms.Compose(
+                [
+                    # transforms.Pad(4),
+                    # transforms.RandomCrop(32),
+                    # transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                    ),
+                ]
+            )
+
+            test_transform = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                    ),
+                ]
+            )
+
+            train = ds.CIFAR10(
+                root=os.getcwd(),
+                train=True,
+                download=True,
+                transform=train_transform,
+            )
+
+            train_loader = data.DataLoader(
+                train,
+                batch_size=256,
+                shuffle=True,
+                num_workers=0,
+                pin_memory=True,
+            )
+
+            test = ds.CIFAR10(
+                root=os.getcwd(),
+                train=False,
+                download=True,
+                transform=test_transform,
+            )
+
+            test_loader = data.DataLoader(
+                test,
+                batch_size=256,  # testing use less
+                # memory, can afford
+                # larger batch_size
+                shuffle=False,
+                num_workers=0,
+                pin_memory=True,
+            )
+
+            # val_loader for the SA algorithm
+            val_loader = data.DataLoader(
+                train,
+                batch_size=1024,
+                shuffle=False,
+                num_workers=0,
+                pin_memory=True,
+            )
+
+            return train_loader, test_loader, val_loader
+
+        elif self.dataset.lower() == "mnist":
+            print("Using mnist")
+            mnist_transform = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.1307,), (0.3081,)),
+                ]
+            )
+            train = ds.MNIST(
+                root=os.getcwd(),
+                train=True,
+                download=True,
+                transform=mnist_transform,
+            )
+
+            train_loader = data.DataLoader(
+                train,
+                batch_size=256,
+                shuffle=False,
+                num_workers=0,
+                pin_memory=True,
+            )
+
+            test = ds.MNIST(
+                root=os.getcwd(),
+                train=False,
+                download=True,
+                transform=mnist_transform,
+            )
+
+            test_loader = data.DataLoader(
+                test,
+                batch_size=256,  # testing use less
+                # memory, can afford
+                # larger batch_size
+                shuffle=False,
+                num_workers=0,
+                pin_memory=True,
+            )
+
+            val_loader = data.DataLoader(
+                train,
+                batch_size=1024,
+                shuffle=False,
+                num_workers=0,
+                pin_memory=True,
+            )
+
+            return train_loader, test_loader, val_loader
+
+        print("dataset not available")
+
         return -1
 
     def _build_model_to_prune(self): 
@@ -202,6 +281,19 @@ class PruningEnv:
         rest_layer_flops = sum(list(self.layer_flops.values())[layer_idx+1:])
 
         return reduced_layer_flops, current_layer_flops, rest_layer_flops
+    def apply_mask(self, new_mask):
+        """Apply new_mask on all the conv layers of the model"""
+
+        idx = 0
+        for layer_name, filter_count in zip(
+            self.layers_to_prune, self.layer_filters
+        ):
+            self.layer = layer_name
+            layer_mask = new_mask[idx : idx + filter_count].clone()
+            layer_mask = torch.unsqueeze(layer_mask, 0)
+
+            filters_counted, pruned_counted = self.prune_layer(layer_mask)
+            idx += filter_count
 
     def get_state(self, include_grads=False,
                         include_flops=False): 
@@ -239,6 +331,7 @@ class PruningEnv:
         state_rep = torch.cat((layer_idx,padded_weights),0)
                     # addn'ls to be concat thru ff conditions
 
+        state_rep = padded_weights
         # State element 3
         if include_grads: 
             loss_func = nn.CrossEntropyLoss()
@@ -387,6 +480,24 @@ class PruningEnv:
                                    # loss.item(), train_acc[-1], 
                                    # str_time))
         logging.info('Training Done')
+    def forward_pass(self, num_of_batches):
+        """Forward pass on n batches"""
+
+        self.model.eval()
+        test_loss = 0
+        correct = 0
+        with torch.no_grad():
+            for _ in range(num_of_batches):
+                data, target = next(iter(self.valid_dl))
+                data, target = data.to(self.device), target.to(self.device)
+                output = self.model(data)
+                test_loss += F.nll_loss(output, target, reduction="sum").item()
+                # get the index of the max log-probability
+                pred = output.argmax(dim=1, keepdim=True)
+                correct += pred.eq(target.view_as(pred)).sum().item()
+
+        return correct / (num_of_batches * self.valid_dl.batch_size)
+    
     def _evaluate_model(self):
         ''' Helper tool for _calculate_reward(),
             evaluates the model being pruned'''
@@ -730,46 +841,142 @@ class PruningEnv:
         self.layer = layer_to_process
         # save total network flops
         self.full_model_flops = sum(self.layer_flops.values())
-        
-    def load_trained(self):
-        '''loads a trained model'''
-        ###Alternate way of loading a state dict.
-        ###Dependent on how it was saved.
-        self.model = copy.deepcopy(torch.load(os.getcwd() + \
-                                                '/best_snapshot_78.pt',
-                                                map_location = self.device))
+def reset_to_k_90(self):
+        """Resets CNN to partially trained net w/ trained params"""
+
+        self.model.load_state_dict(
+            torch.load(os.getcwd() + "/may_21_init_3_trained_90.pth")[
+                "state_dict"
+            ]
+        )
+        self.optimizer.load_state_dict(
+            torch.load(os.getcwd() + "/may_21_init_3_trained_90.pth")[
+                "optim"
+            ]
+        )
+
+        # initialize starting layer to process
+        self.layer = self.layers_to_prune[0]
+        # initialize prune amounts to zero
+        self.layer_prune_amounts = OrderedDict(
+            zip(self.layers_to_prune, [0] * len(self.layers_to_prune))
+        )
+
+        # get layer_flops dict
+        layer_to_process = self.layer  # preserve
+        for name in self.layers_to_prune:
+            self.layer = name
+            orig_flops, flops_remain = self._estimate_layer_flops()
+            # TODO: might be better to explicitly pass layer
+            # name to estimate_flops()
+            self.layer_flops[self.layer] = flops_remain
+        self.layer = layer_to_process
+        # save total network flops
+        self.full_model_flops = sum(self.layer_flops.values())
+
+    def reset_to_init_1(self):
+        """Resets CNN to first initialization"""
+
+        self.model.load_state_dict(
+            torch.load(os.getcwd() + "/init_may_21_num_3.pth")["state_dict"]
+        )
+        self.optimizer.load_state_dict(
+            torch.load(os.getcwd() + "/init_may_21_num_3.pth")["optim"]
+        )
         # initialize starting layer to process
         self.layer = self.layers_to_prune[0]
         # initialize prune amounts to zer
-        self.layer_prune_amounts = OrderedDict(zip(self.layers_to_prune,\
-                                                [0]*len(self.layers_to_prune)))
-        # get layer_flops dict 
-        layer_to_process = self.layer # preserve
+        self.layer_prune_amounts = OrderedDict(
+            zip(self.layers_to_prune, [0] * len(self.layers_to_prune))
+        )
+        # get layer_flops dict
+        layer_to_process = self.layer  # preserve
         for name in self.layers_to_prune:
-                self.layer = name
-                orig_flops, flops_remain = self._estimate_layer_flops() 
-                                #TODO: might be better to explicitly pass layer
-                                # name to estimate_flops()
-                self.layer_flops[self.layer] = flops_remain
+            self.layer = name
+            orig_flops, flops_remain = self._estimate_layer_flops()
+            # name to estimate_flops()
+            self.layer_flops[self.layer] = flops_remain
         self.layer = layer_to_process
         # save total network flops
         self.full_model_flops = sum(self.layer_flops.values())
         
-    #def step(self, action):
-        #''' Run one timestep '''
-
-        # prune_layer(action) # perform action via MARCUS' function
-
-        #reward = self._calculate_reward()
-        #new_state = self._get_state()
         
-        #if self.xp_count == self.expis:
-        #    done = True
-        #    self.xp_count = 0
-        #else:
-        #    done = False
-        #    self.xp_count +=1
+    def reset_to_k_0(self):
+        """Resets CNN to first initialization"""
 
-        #return new_state, reward#, done
+        self.model.load_state_dict(
+            torch.load(os.getcwd() + "/may_21_init_3_trained_0.pth")["state_dict"]
+        )
+        self.optimizer.load_state_dict(
+            torch.load(os.getcwd() + "/may_21_init_3_trained_0.pth")["optim"]
+        )
+        # initialize starting layer to process
+        self.layer = self.layers_to_prune[0]
+        # initialize prune amounts to zer
+        self.layer_prune_amounts = OrderedDict(
+            zip(self.layers_to_prune, [0] * len(self.layers_to_prune))
+        )
+        # get layer_flops dict
+        layer_to_process = self.layer  # preserve
+        for name in self.layers_to_prune:
+            self.layer = name
+            orig_flops, flops_remain = self._estimate_layer_flops()
+            # name to estimate_flops()
+            self.layer_flops[self.layer] = flops_remain
+        self.layer = layer_to_process
+        # save total network flops
+        self.full_model_flops = sum(self.layer_flops.values())
+        
+    def reset_to_k_2(self):
+        """Resets CNN to first initialization"""
+
+        self.model.load_state_dict(
+            torch.load(os.getcwd() + "/may_21_init_3_trained_2.pth")["state_dict"]
+        )
+        self.optimizer.load_state_dict(
+            torch.load(os.getcwd() + "/may_21_init_3_trained_2.pth")["optim"]
+        )
+        # initialize starting layer to process
+        self.layer = self.layers_to_prune[0]
+        # initialize prune amounts to zer
+        self.layer_prune_amounts = OrderedDict(
+            zip(self.layers_to_prune, [0] * len(self.layers_to_prune))
+        )
+        # get layer_flops dict
+        layer_to_process = self.layer  # preserve
+        for name in self.layers_to_prune:
+            self.layer = name
+            orig_flops, flops_remain = self._estimate_layer_flops()
+            # name to estimate_flops()
+            self.layer_flops[self.layer] = flops_remain
+        self.layer = layer_to_process
+        # save total network flops
+        self.full_model_flops = sum(self.layer_flops.values())
+                
+    def reset_to_k_5(self):
+        """Resets CNN to first initialization"""
+
+        self.model.load_state_dict(
+            torch.load(os.getcwd() + "/may_21_init_3_trained_5.pth")["state_dict"]
+        )
+        self.optimizer.load_state_dict(
+            torch.load(os.getcwd() + "/may_21_init_3_trained_5.pth")["optim"]
+        )
+        # initialize starting layer to process
+        self.layer = self.layers_to_prune[0]
+        # initialize prune amounts to zer
+        self.layer_prune_amounts = OrderedDict(
+            zip(self.layers_to_prune, [0] * len(self.layers_to_prune))
+        )
+        # get layer_flops dict
+        layer_to_process = self.layer  # preserve
+        for name in self.layers_to_prune:
+            self.layer = name
+            orig_flops, flops_remain = self._estimate_layer_flops()
+            # name to estimate_flops()
+            self.layer_flops[self.layer] = flops_remain
+        self.layer = layer_to_process
+        # save total network flops
+        self.full_model_flops = sum(self.layer_flops.values())         
 
 
