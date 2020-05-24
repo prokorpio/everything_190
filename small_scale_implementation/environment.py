@@ -841,7 +841,7 @@ class PruningEnv:
         self.layer = layer_to_process
         # save total network flops
         self.full_model_flops = sum(self.layer_flops.values())
-def reset_to_k_90(self):
+    def reset_to_k_90(self):
         """Resets CNN to partially trained net w/ trained params"""
 
         self.model.load_state_dict(

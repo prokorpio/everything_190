@@ -11,7 +11,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 from environment import PruningEnv
 from REINFORCE_agent import REINFORCE_agent
-from utilities import RandSubnet
 
 import argparse
 
@@ -33,7 +32,7 @@ parser.add_argument(
     help="number of batches for the search evaluation forward pass",
 )
 parser.add_argument(
-    "--max_episodes", type = int, default = 2500, help="maximum episodes"
+    "--max_episodes", type = int, default = 3000, help="maximum episodes"
 )
 parser.add_argument(
     "--xp_num_", type = int, default = 100, help="experiment number"
@@ -118,7 +117,7 @@ for episode in range(args.max_episodes):
     ###Actual_action is the masks using m.sample()
     action, log_prob, actual_action = agent.get_action(state)
     
-    print(log_prob)
+
     ###Obtain the mask
     tempmask = torch.ones(action.shape[0])
     mag_rank = torch.topk(action,int(action.shape[0]*args.ratio_prune),largest = False)
@@ -252,7 +251,7 @@ PATH = (
     os.getcwd()
     + "/masked_may_exp/exp"
     + "_"
-    + str(xp_num_)
+    + str(args.xp_num_)
     + "_"
     + str(int(args.ratio_prune*100))
     + "_"
@@ -271,7 +270,7 @@ torch.save(model_dicts, PATH)
 ###Log k_mask_accuracy, as well as 
 log_file = open(
     "textlogs/exp_"
-    + str(xp_num_)
+    + str(args.xp_num_)
     + "_sparsity_"
     + str(int(args.ratio_prune*100))
     + ".txt", "w"
@@ -279,7 +278,7 @@ log_file = open(
 log_file.write(str("evaluated_accuracy_best_mask: " + str(final_acc) + "\n"))
 log_file.write(str("forwardpass_accuracy_best_mask: " + str(best_acc) + "\n"))
 
-
+log_file.close()
 
 #15 is with log of total/pruned
 #1 march 13 is with amount pruned to be increased (works as intended)
