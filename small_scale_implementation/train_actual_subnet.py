@@ -80,7 +80,7 @@ for name, param in pruned_subnet.model.named_modules():
 pruned_subnet.model.load_state_dict(model_dicts['state_dict'])
 
 
-best_val_acc = 0
+best_val_acc = 0.0
 
 writer = SummaryWriter(
     ("runs_training_may_exp/exp_"
@@ -100,8 +100,10 @@ for n_iter in range(90):
     print("EPOCH",n_iter)
     pruned_subnet.train_model(env.train_dl, num_epochs = 1)
     val_acc = pruned_subnet.evaluate(env.test_dl)
+    print(val_acc, best_val_acc)
     if val_acc > best_val_acc:
         best_val_acc = val_acc
+        print("does this happen")
     print(val_acc)
     writer.add_scalar('Test/train', val_acc, n_iter)
 
@@ -131,7 +133,16 @@ model_dicts = {'state_dict': pruned_subnet.model.state_dict(),
         'filters_per_layer': filters_per_layer}
 torch.save(model_dicts, PATH_to)
 
+log_file = open(
+    "textlogs/exp_"
+    + str(args.xp_num_)
+    + "_sparsity_"
+    + str(int(args.ratio_prune*100))
+    + ".txt", "a"
+)
 
+log_file.write(str("best_trained_acc: " + str(best_val_acc) + "\n"))
+log_file.close()
 #unpruned 3728.4113001823425 named as pruned but no number
 #pruned 75 2271.4468524456024 (error? CPU overclocked?)
 #pruned 50 3788.0326392650604

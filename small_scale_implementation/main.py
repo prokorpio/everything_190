@@ -41,7 +41,7 @@ parser.add_argument(
     "--method", type = str, default = "RL", help="method to use"
 )
 parser.add_argument(
-    "--k_epoch", type = int, default = 5, help = "which k to reset to"
+    "--k_epoch", type = int, default = -1, help = "which k to reset to"
 )
 args = parser.parse_args()
 # Logging utils
@@ -83,14 +83,11 @@ start_time = time.time()
 best_acc = 0
 best_mask = torch.ones((env.state_size))
 best_episode_count  = 0
+warning_flag = False
 for episode in range(args.max_episodes):
-    print("\n=========== Episode", episode,"============")
+    if episode % 250 == 0:
+        print("\n=========== Episode", episode,"============")
 
-    
-    action_reward_buffer = [] # list of (action,reward) tuples per episode
-    
-    
-    
     
     ###Reset CNN to k-epoch params and get the state for the entire episode 
 
@@ -123,10 +120,6 @@ for episode in range(args.max_episodes):
     mag_rank = torch.topk(action,int(action.shape[0]*args.ratio_prune),largest = False)
     tempmask[mag_rank[1]] = 0
     
-    # env.load_trained()
-    
-    print(tempmask.sum(), "tempmasksum")
-    
     ###Apply the mask on chosen epoch k
     if args.k_epoch == 0:
         env.reset_to_k_0()
@@ -153,39 +146,47 @@ for episode in range(args.max_episodes):
         best_episode_count = episode
     
     
-    action_reward_buffer.append((action, reward))
-    actions, rewards = zip(*action_reward_buffer) # both var are tuple wrapped
-    # actions: tuple->tensor
-    actions = torch.squeeze(torch.stack(actions)).type(torch.float)
 
+
+    ###Update the policy
     agent.update_policy(reward, action, log_prob) 
     obj_func = (-log_prob*reward).sum()
-    print("obj_unc", obj_func)
+    
     amount_pruned = 960-tempmask.sum()
-    print("amount_pruned", amount_pruned)
-    print("acc", reward)
 
     ###Check the amount per layer
     ###Record the per layer_mask
     layer_mask = []
     num_per_layer = []
+    idx = 0
     for module in env.model.modules():
         # for conv2d obtain the filters to be kept.
         if isinstance(module, nn.BatchNorm2d):
             weight_copy = module.weight.data.clone()
+            weight_copy = torch.abs(weight_copy)
+            
             filter_mask = weight_copy.gt(0.0).float()
-            layer_mask.append(filter_mask)
+            
 
+            
+            if (tempmask[idx:idx + weight_copy.shape[0]].float().sum()\
+                        != filter_mask.float().sum().cpu()):
+                warning_flag = True
+            else:
+                pass
+
+            layer_mask.append(filter_mask)
+            idx = idx + weight_copy.shape[0]
+            
+    idx = 0
     for i, item in enumerate(layer_mask):
         num_per_layer.append(int(item.sum().item()))
 
-    print("Filters per layer:", num_per_layer)
-    print("Total", sum(num_per_layer))
-    print("accuracy", reward)
     
     
     writer.add_scalar('Accuracy_vs_Episode', reward, episode)
     writer.add_scalar('Obj_func_vs_episode', obj_func, episode)
+    writer.add_scalar('Amount_pruned', amount_pruned, episode)
 
 
 
@@ -225,6 +226,7 @@ print(final_acc)
 ###Apply to initialization and save
 env.reset_to_init_1()
 env.apply_mask(best_mask)
+init_acc_best_mask = env._evaluate_model()
 ##Train the final to compare with the unpruned model
 ###Save into .pth
 if args.method == "SA":
@@ -275,9 +277,21 @@ log_file = open(
     + str(int(args.ratio_prune*100))
     + ".txt", "w"
 )
-log_file.write(str("evaluated_accuracy_best_mask: " + str(final_acc) + "\n"))
-log_file.write(str("forwardpass_accuracy_best_mask: " + str(best_acc) + "\n"))
-
+log_file.write(str(time.strftime("%H:%M:%S", time.gmtime(elapsed_time)) + "\n"))
+log_file.write(str("found_at_episode: " + str(best_episode_count) + "\n"))
+log_file.write(
+    str("init_evaluated_accuracy_best_mask: " + str(init_acc_best_mask) + "\n")
+)
+log_file.write(
+    str("k_epoch_evaluated_accuracy_best_mask: " + str(final_acc) + "\n")
+)
+log_file.write(
+    str("k_epoch_forwardpass_accuracy_best_mask: " + str(best_acc) + "\n")
+)
+if warning_flag == True:
+    log_file.write("Non match between tempmask and BN weight\n")
+else:
+    log_file.write("BN check all weight zeros have tempmask zeros\n")
 log_file.close()
 
 #15 is with log of total/pruned

@@ -76,8 +76,6 @@ class REINFORCE_agent():
         loss = (-log_prob *episode_rewards).sum()        
         self.policy.Adamizer.zero_grad() # reset weight update grads to zero
         objective_func = loss
-        print("objective_func", objective_func)
-        print("episode_rewards", episode_rewards)
  
         #objective_func = torch.stack(Jt).sum()  
         # stack will concat multiple 1x1 tensors

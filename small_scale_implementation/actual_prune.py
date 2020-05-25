@@ -38,12 +38,17 @@ def actual_prune(path_from, path_to):
     env.model.load_state_dict(torch.load(path_from)['state_dict'])
     env.optimizer.load_state_dict(torch.load(path_from)['optim']) 
     print("accuracy is ", env._evaluate_model())
+    
+    
     layer_mask = [] #list
     num_per_layer = []
+    
+    
     for module in env.model.modules():
         #for conv2d obtain the filters to be kept.
         if isinstance(module, nn.BatchNorm2d):
             weight_copy = module.weight.data.clone()
+            weight_copy = torch.abs(weight_copy)
             filter_mask = weight_copy.gt(0.0).float()
             #print(filter_mask)
             #print(weight_copy)
@@ -160,7 +165,9 @@ def actual_prune(path_from, path_to):
     log_file.write(
         str("New weights and Flops: "
             + str(num_weights)
+            + "_"
             + str(num_flops)
+            + "_"
             + str(args.method) + "\n")
     )
 
@@ -170,7 +177,9 @@ def actual_prune(path_from, path_to):
     log_file.write(
         str("Original weights and Flops: "
         + str(num_weights)
+        + "_"
         + str(num_flops)
+        + "_"
         + str(args.method) + "\n")
     )        
     

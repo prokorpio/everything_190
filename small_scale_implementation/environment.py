@@ -404,10 +404,10 @@ class PruningEnv:
                     # Concat two core elements
                     try:
                         state_rep = torch.cat((state_rep,pooled_weights_mean),0)
-                        print("Concatting")
+                        # print("Concatting")
                     except:
                         state_rep = pooled_weights_mean
-                        print("staterep dne yet")
+                        # print("staterep dne yet")
                                 # addn'ls to be concat thru ff conditions
         return state_rep
     def get_grads(self):

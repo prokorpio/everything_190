@@ -23,5 +23,5 @@ class PolicyNetwork(nn.Module):
         x = x.view((self.action_size, 2))
         
         x = torch.softmax(x, dim = 1)
-        print("xshape", x.shape)
+        # print("xshape", x.shape)
         return x
