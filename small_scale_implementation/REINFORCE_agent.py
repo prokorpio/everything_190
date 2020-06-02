@@ -48,17 +48,18 @@ class REINFORCE_agent():
         #https://pytorch.org/docs/stable/distributions.html
         #https://github.com/pytorch/examples/blob/master/reinforcement_learning/reinforce.py
         action_prob_distrib = self.policy(state) 
-        m = Categorical(action_prob_distrib)
+        #m = Categorical(action_prob_distrib)
         
         ###Sample from the (960,2) the first column will denote possibility of not keeping
         ###The second will denote possibility of keeping
-        action = m.sample()
-        log_prob = m.log_prob(action)
-        
+        #action = m.sample()
+        #log_prob = m.log_prob(action)
+
         ###The ones to be kept are the ones with the highest "Keep" score
         ###Note that the sum along the rows are equal to one
-        action_values = action_prob_distrib[:,1]
-        return action_values, log_prob, action
+        action_values = action_prob_distrib
+        log_prob = torch.log(action_prob_distrib)
+        return action_values, log_prob#, action
         # return action_prob_distrib#, action_log_prob
         #action_log_prob = torch.log(action_prob_distrib) 
         #sampled_action = np.random.choice(self.action_size, \
@@ -73,7 +74,7 @@ class REINFORCE_agent():
     def update_policy(self, episode_rewards, actions,log_prob):
 
         
-        loss = (-log_prob *episode_rewards).sum()        
+        loss = (log_prob *episode_rewards).sum()        
         self.policy.Adamizer.zero_grad() # reset weight update grads to zero
         objective_func = loss
  

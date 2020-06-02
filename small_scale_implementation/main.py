@@ -112,7 +112,7 @@ for episode in range(args.max_episodes):
     ###Action is the probabilities
     ###log_prob is the log prob of action
     ###Actual_action is the masks using m.sample()
-    action, log_prob, actual_action = agent.get_action(state)
+    action, log_prob = agent.get_action(state)
     
 
     ###Obtain the mask
@@ -120,6 +120,10 @@ for episode in range(args.max_episodes):
     mag_rank = torch.topk(action,int(action.shape[0]*args.ratio_prune),largest = False)
     tempmask[mag_rank[1]] = 0
     
+    
+    #Obtain the corresponding log prob
+    zero_ninesixty = torch.arange(0,960)
+    #log_prob = log_prob_both[(zero_ninesixty,tempmask.type(torch.long))]
     ###Apply the mask on chosen epoch k
     if args.k_epoch == 0:
         env.reset_to_k_0()

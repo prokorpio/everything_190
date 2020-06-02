@@ -32,7 +32,7 @@ parser.add_argument(
     help="number of batches for the search evaluation forward pass",
 )
 parser.add_argument(
-    "--max_episodes", type = int, default = 3000, help="maximum episodes"
+    "--max_episodes", type = int, default = 6000, help="maximum episodes"
 )
 parser.add_argument(
     "--xp_num_", type = int, default = 100, help="experiment number"
@@ -74,8 +74,8 @@ writer = SummaryWriter(
 )
 
 # Define Agent, Training Env, & HyperParams
-env = PruningEnv(state_size = 32)
-agent = REINFORCE_agent(env.state_size, action_size=32)
+env = PruningEnv(state_size = 64)
+agent = REINFORCE_agent(env.state_size, action_size=64)
 
 
 start_time = time.time()
@@ -113,8 +113,8 @@ for episode in range(args.max_episodes):
 
     state = env.get_global_state_rep()
     state = state.cpu()
-    state = state[0:32]
-    
+    state = state[0:64]
+    state = torch.ones((64))
     ###Action is the probabilities
     ###log_prob is the log prob of action
     ###Actual_action is the masks using m.sample()
@@ -126,7 +126,7 @@ for episode in range(args.max_episodes):
     tempmask = torch.ones((960))
     mag_rank = torch.topk(action,int(action.shape[0]*args.ratio_prune),largest = False)
     small_mask[mag_rank[1]] = 0
-    tempmask[0:32] = small_mask
+    tempmask[0:64] = small_mask
     
     if (tempmask == prev_mask).all():
         print("Same as previous")
@@ -165,7 +165,7 @@ for episode in range(args.max_episodes):
 
     ###Update the policy
     agent.update_policy(reward, action, log_prob) 
-    obj_func = (-log_prob*reward).sum()
+    obj_func = (log_prob*reward).sum()
     
     amount_pruned = 960-tempmask.sum()
 
