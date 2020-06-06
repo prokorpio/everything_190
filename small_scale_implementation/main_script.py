@@ -50,10 +50,10 @@ if __name__ == '__main__':
     method_list = ["RL"]
     for xp_num_, ratio_prune in zip(xp_num_list, ratio_prune_list):
 
-        #Do the routine for SA, rand, mag_rewind, mag_sign_rewind
+        #Do the routine for RL
         mask_prune_train(xp_num_, ratio_prune, method_list, -1)
         
-        #Do the only for SA with modified k
+        #Do the routine for RL with modified epoch k
         mask_prune_train(xp_num_+1, ratio_prune, method_list, 0)#Try k = 0
         mask_prune_train(xp_num_+2, ratio_prune, method_list, 2)#try k = 2
         mask_prune_train(xp_num_+3, ratio_prune, method_list, 5)#Try k = 5
