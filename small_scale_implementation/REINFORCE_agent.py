@@ -74,7 +74,7 @@ class REINFORCE_agent():
     def update_policy(self, episode_rewards, actions,log_prob):
 
         
-        loss = (log_prob *episode_rewards).sum()        
+        loss = (-log_prob *episode_rewards).sum()        
         self.policy.Adamizer.zero_grad() # reset weight update grads to zero
         objective_func = loss
  

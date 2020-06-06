@@ -45,7 +45,7 @@ def mask_prune_train(xp_num_, ratio_prune, method_list, k_epoch):
 
 if __name__ == '__main__':
 
-    xp_num_list = [300,305,310,315]
+    xp_num_list = [500,505,510,515]
     ratio_prune_list = [0.5, 0.6, 0.7, 0.8]
     method_list = ["RL"]
     for xp_num_, ratio_prune in zip(xp_num_list, ratio_prune_list):

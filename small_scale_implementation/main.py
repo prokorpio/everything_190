@@ -32,7 +32,7 @@ parser.add_argument(
     help="number of batches for the search evaluation forward pass",
 )
 parser.add_argument(
-    "--max_episodes", type = int, default = 3000, help="maximum episodes"
+    "--max_episodes", type = int, default = 1000, help="maximum episodes"
 )
 parser.add_argument(
     "--xp_num_", type = int, default = 100, help="experiment number"

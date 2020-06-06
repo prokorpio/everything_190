@@ -845,12 +845,12 @@ class PruningEnv:
         """Resets CNN to partially trained net w/ trained params"""
 
         self.model.load_state_dict(
-            torch.load(os.getcwd() + "/may_21_init_3_trained_90.pth")[
+            torch.load(os.getcwd() + "/may_24_init_4_trained_90.pth")[
                 "state_dict"
             ]
         )
         self.optimizer.load_state_dict(
-            torch.load(os.getcwd() + "/may_21_init_3_trained_90.pth")[
+            torch.load(os.getcwd() + "/may_24_init_4_trained_90.pth")[
                 "optim"
             ]
         )
@@ -878,10 +878,10 @@ class PruningEnv:
         """Resets CNN to first initialization"""
 
         self.model.load_state_dict(
-            torch.load(os.getcwd() + "/init_may_21_num_3.pth")["state_dict"]
+            torch.load(os.getcwd() + "/init_may_24_num_4.pth")["state_dict"]
         )
         self.optimizer.load_state_dict(
-            torch.load(os.getcwd() + "/init_may_21_num_3.pth")["optim"]
+            torch.load(os.getcwd() + "/init_may_24_num_4.pth")["optim"]
         )
         # initialize starting layer to process
         self.layer = self.layers_to_prune[0]
@@ -905,10 +905,10 @@ class PruningEnv:
         """Resets CNN to first initialization"""
 
         self.model.load_state_dict(
-            torch.load(os.getcwd() + "/may_21_init_3_trained_0.pth")["state_dict"]
+            torch.load(os.getcwd() + "/may_24_init_4_trained_0.pth")["state_dict"]
         )
         self.optimizer.load_state_dict(
-            torch.load(os.getcwd() + "/may_21_init_3_trained_0.pth")["optim"]
+            torch.load(os.getcwd() + "/may_24_init_4_trained_0.pth")["optim"]
         )
         # initialize starting layer to process
         self.layer = self.layers_to_prune[0]
@@ -931,10 +931,10 @@ class PruningEnv:
         """Resets CNN to first initialization"""
 
         self.model.load_state_dict(
-            torch.load(os.getcwd() + "/may_21_init_3_trained_2.pth")["state_dict"]
+            torch.load(os.getcwd() + "/may_24_init_4_trained_2.pth")["state_dict"]
         )
         self.optimizer.load_state_dict(
-            torch.load(os.getcwd() + "/may_21_init_3_trained_2.pth")["optim"]
+            torch.load(os.getcwd() + "/may_24_init_4_trained_2.pth")["optim"]
         )
         # initialize starting layer to process
         self.layer = self.layers_to_prune[0]
@@ -957,10 +957,10 @@ class PruningEnv:
         """Resets CNN to first initialization"""
 
         self.model.load_state_dict(
-            torch.load(os.getcwd() + "/may_21_init_3_trained_5.pth")["state_dict"]
+            torch.load(os.getcwd() + "/may_24_init_4_trained_5.pth")["state_dict"]
         )
         self.optimizer.load_state_dict(
-            torch.load(os.getcwd() + "/may_21_init_3_trained_5.pth")["optim"]
+            torch.load(os.getcwd() + "/may_24_init_4_trained_5.pth")["optim"]
         )
         # initialize starting layer to process
         self.layer = self.layers_to_prune[0]
