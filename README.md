@@ -3,7 +3,7 @@ this repo contains all our codes for EEE 190
 
 ## ReadMe for Running the RL experiment
 For running experiments
-1. Using initializer.py and trainer.py, obtain Checkpoints of BasicCNN at initialization, epoch 0,2,5,90. Name properly within initializer.py and trainer.py. Edit environment.py functions to load the said checkpoint with the naming convention used.
+1. Using initializer.py and trainer.py, obtain Checkpoints of BasicCNN at initialization, epoch 0,2,5,90. Name properly within initializer.py and trainer.py. Edit environment.py functions to load the said checkpoints (i.e. reset_to_k_90, reset_to_init_1, etc.) with the naming convention used.
 
 2. Run main_script.py. Name the XP numbers in increments of 5.
 
@@ -15,6 +15,9 @@ For running experiments
  >3. [model.py](small_scale_implementation/model.py) : Contains modules used by RL agent
  >4. [models_to_prune.py](small_scale_implementation/models_to_prune.py) : Various CNN modules to run pruning algo onto
  >5. [main.py](small_scale_implementation/main.py) : Python file for main algorithm
+ >6. [initializer.py](small_scale_implementation/initializer.py) : File for initializing a BasicCNN
+ >7. [trainer.py](small_scale_implementation/trainer.py) : File for training the BasicCNN initialized in initializer.py
+ >8. [main_script.py](small_scale_implementation/main_script.py) : Python file that runs all the .py files needed to search for a mask using RL, prune the BasicCNN indicated in environment.py, train the smaller subnetwork.
 
 
 ## (Outdated)Table of Contents
