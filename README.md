@@ -1,7 +1,22 @@
 # everything_190
 this repo contains all our codes for EEE 190
 
-## Table of Contents
+For running experiments
+1. Obtain Checkpoints of BasicCNN at initialization, epoch 0,2,5,90. Name properly and edit environment.py functions to load the said checkpoint.
+
+2. Run main_script.py. Only tested on sparsities greater than 0.5.
+
+
+## ReadMe for Running the RL experiments
+1. [small_scale_implementation/](small_scale_implementation) : RL pruner implementation for final setup of 198
+ >1. [REINFORCE_agent.py](small_scale_implementation/REINFORCE_agent.py) : the RL agent
+ >2. [environment.py](small_scale_implementation/environment.py) : ties the agent and the models to be pruned
+ >3. [model.py](small_scale_implementation/model.py) : Contains modules used by RL agent
+ >4. [models_to_prune.py](small_scale_implementation/models_to_prune.py) : Various CNN modules to run pruning algo onto
+ >5. [main.py](small_scale_implementation/main.py) : Python file for main algorithm
+
+
+## (Outdated)Table of Contents
 1. [small_scale_implementation/](small_scale_implementation) : RL pruner implementation on a 4-layer CNN
   >1. [REINFORCE_agent.py](small_scale_implementation/REINFORCE_agent.py) : the RL agent
   >2. [environment.py](small_scale_implementation/environment.py) : ties the agent and the models to be pruned
