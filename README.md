@@ -1,13 +1,14 @@
 # everything_190
 this repo contains all our codes for EEE 190
 
+## ReadMe for Running the RL experiment
 For running experiments
-1. Obtain Checkpoints of BasicCNN at initialization, epoch 0,2,5,90. Name properly and edit environment.py functions to load the said checkpoint.
+1. Using initializer.py and trainer.py, obtain Checkpoints of BasicCNN at initialization, epoch 0,2,5,90. Name properly within initializer.py and trainer.py. Edit environment.py functions to load the said checkpoint with the naming convention used.
 
-2. Run main_script.py. Only tested on sparsities greater than 0.5.
+2. Run main_script.py. Name the XP numbers in increments of 5.
 
 
-## ReadMe for Running the RL experiments
+## Updated Table of Contents
 1. [small_scale_implementation/](small_scale_implementation) : RL pruner implementation for final setup of 198
  >1. [REINFORCE_agent.py](small_scale_implementation/REINFORCE_agent.py) : the RL agent
  >2. [environment.py](small_scale_implementation/environment.py) : ties the agent and the models to be pruned
