@@ -13,7 +13,7 @@ Our process can briefly be summarized as follows.
 6. This CNN is pruned and the subnetwork is trained to convergence.
 
 ## Summary of Results
-For the RL our final result was that if the reward was inverted (such that it did NOT follow the REINFORCE equation), a semblance of performance was achieved by the RL agent. However the bulk of our work was on using SA. Due to the intractability of RL we swapped our apporach to the problem to SA. A complete documentation can be found in our 198 Manuscript
+For the RL our final result was that if the reward was inverted (such that it did NOT follow the REINFORCE equation), a semblance of performance was achieved by the RL agent. A in-depth analysis was not done due to time constraints. Also, the bulk of our work was on using SA. This was due to the intractability of our RL agent, which led us to change our apporach to the problem to SA. A complete documentation of results, justification for our change of approach, etc. can be found in our 198 Manuscript
 
 ## ReadMe for Running the RL experiment
 For running experiments
