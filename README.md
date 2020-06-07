@@ -1,5 +1,17 @@
-# everything_190
-this repo contains all our codes for EEE 190
+## Authors
+This codebase was developed by Jeff Sanchez and Marcus Reyes for their senior-year project; UCL, UP-Diliman 2020
+
+## Background
+This library contains the implementation of the RL portion of our thesis project, entitled "Heuristic Approach Towards Early Compression Of Neural Networks. Inspired by recent works on Lottery Tickets [1,2], we attempted to automate the process of finding high performing and high sparsity but structured subnetworks (winning tickets) without relying on already trained networks. This form of compression allows for memory and energy savings in training neural networks. Initially we proposed to do so using Reinforcement Learning. The folder [small_scall_implementation/](small_scale_implementation) contains the code for running our RL experiments. However the github for our final chosen appoach, Simulated Annealing, is at https://github.com/marcus-reyes/EEE198_UCL10
+
+Our process can briefly be summarized as follows.
+1. We input a representation of a CNN into the RL Agent
+2. The RL Agent outputs an action, pruning filters from the CNN according to a fixed sparsity.
+3. The Rl Agent updates its parameters
+4. The RL output mask that obtains the best untrained accuracy is taken.
+5. This mask is applied on the CNN network with the CNN having its parameters at initial value
+6. This CNN is pruned and the subnetwork is trained to convergence.
+
 
 ## ReadMe for Running the RL experiment
 For running experiments
